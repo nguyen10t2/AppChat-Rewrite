@@ -1,0 +1,3 @@
+ALTER TABLE "participants" ADD COLUMN "last_seen_message_id" uuid;--> statement-breakpoint
+ALTER TABLE "participants" ADD CONSTRAINT "participants_last_seen_message_id_messages_id_fk" FOREIGN KEY ("last_seen_message_id") REFERENCES "public"."messages"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_message_created_at" ON "messages" USING btree ("created_at");

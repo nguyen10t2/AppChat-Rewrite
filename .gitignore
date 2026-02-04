@@ -1,0 +1,7 @@
+/target
+
+
+# .lock
+
+Cargo.lock
+.env
