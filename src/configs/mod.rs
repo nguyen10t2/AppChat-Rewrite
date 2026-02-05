@@ -1,5 +1,4 @@
 use deadpool_redis::{Runtime, redis::AsyncCommands};
-use log::info;
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
 use crate::{ENV, api::error};
@@ -12,7 +11,6 @@ pub async fn connect_database() -> Result<PgPool, error::SystemError> {
         .acquire_slow_threshold(std::time::Duration::from_secs(3))
         .connect(&database_url)
         .await?;
-    info!("Connected to the database successfully.");
     Ok(pool)
 }
 
@@ -25,7 +23,6 @@ impl RedisCache {
         let mut cfg = deadpool_redis::Config::from_url(&ENV.redis_url);
         cfg.pool = Some(deadpool_redis::PoolConfig { max_size: 16, ..Default::default() });
         let pool = cfg.create_pool(Some(Runtime::Tokio1))?;
-        info!("Connected to Redis cache successfully.");
         Ok(Self { pool })
     }
 

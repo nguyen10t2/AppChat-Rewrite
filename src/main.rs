@@ -32,13 +32,11 @@ async fn health_check() -> &'static str {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let db_pool = connect_database().await.map_err(|e| {
-        log::error!("Failed to connect to the database: {:?}", e);
+    let db_pool = connect_database().await.map_err(|_| {
         std::io::Error::new(std::io::ErrorKind::Other, "Database connection error")
     })?;
 
-    let redis_pool = RedisCache::new().await.map_err(|e| {
-        log::error!("Failed to connect to Redis: {:?}", e);
+    let redis_pool = RedisCache::new().await.map_err(|_| {
         std::io::Error::new(std::io::ErrorKind::Other, "Redis connection error")
     })?;
 

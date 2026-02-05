@@ -27,6 +27,12 @@ pub fn verify_password(hash: &str, password: &str) -> Result<bool, error::System
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TypeClaims {
+    RefreshToken,
+    AccessToken,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: uuid::Uuid,
@@ -34,12 +40,23 @@ pub struct Claims {
     pub exp: u64,
     pub jti: Option<uuid::Uuid>,
     pub role: UserRole,
+    pub _type: Option<TypeClaims>,
 }
 
 impl Claims {
-    pub fn new(sub: &uuid::Uuid, role: &UserRole, exp: u64, jti: Option<&uuid::Uuid>) -> Self {
+    pub fn new(sub: &uuid::Uuid, role: &UserRole, exp: u64) -> Self {
         let now = chrono::Utc::now().timestamp() as u64;
-        Claims { sub: *sub, iat: now, exp: now + exp, jti: jti.cloned(), role: role.clone() }
+        Claims { sub: *sub, iat: now, exp: now + exp, role: role.clone(), jti: None, _type: None }
+    }
+
+    pub fn with_jti(mut self, jti: uuid::Uuid) -> Self {
+        self.jti = Some(jti);
+        self
+    }
+
+    pub fn with_type(mut self, _type: TypeClaims) -> Self {
+        self._type = Some(_type);
+        self
     }
 
     pub fn encode(&self, secret: &[u8]) -> Result<String, error::SystemError> {

@@ -2,10 +2,12 @@ use std::rc::Rc;
 
 use crate::{ENV, api::error, modules::user::schema::UserRole, utils::Claims};
 use actix_web::{
-    Error, HttpMessage, HttpRequest, body::MessageBody, dev::{ServiceRequest, ServiceResponse}, middleware::Next
+    Error, HttpMessage, HttpRequest,
+    body::MessageBody,
+    dev::{ServiceRequest, ServiceResponse},
+    middleware::Next,
 };
 use futures_util::{FutureExt, future::LocalBoxFuture};
-use log::info;
 
 pub async fn authentication<B>(
     req: ServiceRequest,
@@ -14,7 +16,6 @@ pub async fn authentication<B>(
 where
     B: MessageBody + 'static,
 {
-    info!("Authenticating request: {}", req.path());
     let auth = req.headers().get("Authorization").and_then(|h| h.to_str().ok());
     let token = match auth.and_then(|h| h.strip_prefix("Bearer ")) {
         Some(t) => t,
@@ -55,14 +56,10 @@ where
     move |req: ServiceRequest, next: Next<B>| {
         let roles = allowd_roles.clone();
         async move {
-            let role = {
-                get_claims(&req.request())?.role
-            };
-
-            info!("Authorizing request for role: {:?}", role);
+            let role = get_claims(&req.request())?.role;
 
             if !roles.contains(&role) {
-                return Err(error::Error::forbidden("Forbidden").into());
+                return Err(error::Error::forbidden("No permission").into());
             }
             next.call(req).await
         }

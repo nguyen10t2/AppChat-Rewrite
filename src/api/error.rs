@@ -71,7 +71,6 @@ impl ResponseError for Error {
             | Error::Unauthorized(msg)
             | Error::BadRequest(msg)
             | Error::Forbidden(msg) => {
-                log::info!("Error Response: {}", msg);
                 HttpResponse::build(self.status_code()).json(ErrorBody { message: msg.clone() })
             }
             // No Message

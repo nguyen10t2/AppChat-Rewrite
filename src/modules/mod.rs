@@ -6,4 +6,6 @@ pub mod user {
     pub mod handle;
     pub mod service;
     pub mod route;
+    
+    pub const CACHE_TTL: usize = 5 * 60;
 }

@@ -31,7 +31,10 @@ impl UserRepository for UserRepositoryPg {
         Ok(user)
     }
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<UserEntity>, error::SystemError> {
+    async fn find_by_username(
+        &self,
+        username: &str,
+    ) -> Result<Option<UserEntity>, error::SystemError> {
         let user = sqlx::query_as::<_, UserEntity>(
             "SELECT * FROM users WHERE lower(username) = lower($1) AND deleted_at IS NULL",
         )
@@ -83,5 +86,16 @@ impl UserRepository for UserRepositoryPg {
         .ok_or_else(|| error::SystemError::not_found("User not found"))?;
 
         Ok(())
+    }
+
+    async fn delete(&self, id: &Uuid) -> Result<bool, error::SystemError> {
+        let rows =
+            sqlx::query("UPDATE users SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL")
+                .bind(id)
+                .execute(&self.pool)
+                .await?
+                .rows_affected();
+
+        Ok(rows > 0)
     }
 }
