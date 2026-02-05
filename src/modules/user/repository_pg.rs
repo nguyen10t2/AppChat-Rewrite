@@ -59,8 +59,8 @@ impl UserRepository for UserRepositoryPg {
         Ok(id)
     }
 
-    async fn update(&self, id: &Uuid, user: &UpdateUser) -> Result<(), error::SystemError> {
-        sqlx::query(
+    async fn update(&self, id: &Uuid, user: &UpdateUser) -> Result<UserEntity, error::SystemError> {
+        let user = sqlx::query_as::<_, UserEntity>(
             r#"
         UPDATE users
         SET
@@ -85,7 +85,7 @@ impl UserRepository for UserRepositoryPg {
         .await?
         .ok_or_else(|| error::SystemError::not_found("User not found"))?;
 
-        Ok(())
+        Ok(user)
     }
 
     async fn delete(&self, id: &Uuid) -> Result<bool, error::SystemError> {

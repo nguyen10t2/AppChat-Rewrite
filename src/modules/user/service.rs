@@ -4,7 +4,6 @@ use uuid::Uuid;
 use crate::ENV;
 use crate::api::error;
 use crate::configs::RedisCache;
-
 use crate::modules::user::CACHE_TTL;
 use crate::modules::user::model::{
     SignInModel, SignUpModel, UpdateUser, UpdateUserModel, UserResponse,
@@ -40,15 +39,13 @@ impl UserService {
         }
     }
 
-    pub async fn update(&self, id: Uuid, user: UpdateUserModel) -> Result<(), error::SystemError> {
-        if user.username.is_none()
-            && user.email.is_none()
-            && user.first_name.is_none()
-            && user.last_name.is_none()
-            && user.avatar_url.is_none()
-            && user.bio.is_none()
-            && user.phone.is_none()
-        {
+    pub async fn update(
+        &self,
+        id: Uuid,
+        user: UpdateUserModel,
+    ) -> Result<UserResponse, error::SystemError> {
+        println!("UpdateUserModel: {:?}", user);
+        if user.is_empty() {
             return Err(error::SystemError::bad_request("No fields to update"));
         }
 
@@ -57,6 +54,8 @@ impl UserService {
             email: user.email,
             display_name: match (user.first_name, user.last_name) {
                 (Some(first), Some(last)) => Some(format!("{} {}", first, last)),
+                (Some(first), None) => Some(first),
+                (None, Some(last)) => Some(last),
                 _ => None,
             },
             avatar_url: user.avatar_url,
@@ -64,11 +63,13 @@ impl UserService {
             phone: user.phone,
         };
 
-        self.repo.update(&id, &update_user).await?;
+        let updated_user = self.repo.update(&id, &update_user).await?;
 
         let key = format!("user:{}", id);
-        self.cache.delete(&key).await?;
-        Ok(())
+        let response = UserResponse::from(updated_user);
+        self.cache.set(&key, &response, CACHE_TTL).await?;
+
+        Ok(response)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<(), error::SystemError> {

@@ -3,7 +3,7 @@ use actix_web::{
 };
 use uuid::Uuid;
 
-use crate::api::{error, success};
+use crate::{api::{error, success}, utils::ValidatedJson};
 use crate::modules::user::model::SignUpResponse;
 use crate::modules::user::{model, service::UserService};
 use crate::{ENV, middlewares::get_claims};
@@ -31,9 +31,9 @@ pub async fn get_user(
 pub async fn update_user(
     user_service: web::Data<UserService>,
     user_id: web::Path<Uuid>,
-    user_data: web::Json<model::UpdateUserModel>,
+    user_data: ValidatedJson<model::UpdateUserModel>,
 ) -> Result<success::Success<()>, error::Error> {
-    user_service.update(user_id.into_inner(), user_data.into_inner()).await?;
+    user_service.update(user_id.into_inner(), user_data.0).await?;
     Ok(success::Success::ok(None).message("User updated successfully"))
 }
 
@@ -49,18 +49,18 @@ pub async fn delete_user(
 #[post("/signup")]
 pub async fn sign_up(
     user_service: web::Data<UserService>,
-    user_data: web::Json<model::SignUpModel>,
+    user_data: ValidatedJson<model::SignUpModel>,
 ) -> Result<success::Success<SignUpResponse>, error::Error> {
-    let user_id = user_service.sign_up(user_data.into_inner()).await?;
+    let user_id = user_service.sign_up(user_data.0).await?;
     Ok(success::Success::created(Some(SignUpResponse { id: user_id })).message("Signup successful"))
 }
 
 #[post("/signin")]
 pub async fn sign_in(
     user_service: web::Data<UserService>,
-    user_data: web::Json<model::SignInModel>,
+    user_data: ValidatedJson<model::SignInModel>,
 ) -> Result<success::Success<model::SignInResponse>, error::Error> {
-    let (access_token, refresh_token) = user_service.sign_in(user_data.into_inner()).await?;
+    let (access_token, refresh_token) = user_service.sign_in(user_data.0).await?;
     let response = model::SignInResponse { access_token };
     let refresh_cookie = Cookie::build("refresh_token", refresh_token)
         .path("/")

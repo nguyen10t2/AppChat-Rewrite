@@ -1,5 +1,4 @@
 use core::str;
-
 use validator::Validate;
 use serde::{Deserialize, Serialize};
 
@@ -34,8 +33,9 @@ pub struct RefreshTokenModel {
     pub refresh_token: String,
 }
 
-#[allow(unused)]
-#[derive(Deserialize, Validate)]
+use crate::utils::double_option;
+
+#[derive(Debug, Deserialize, Validate)]
 pub struct UpdateUserModel {
     #[validate(length(min = 3, message = "Username must be at least 3 characters long"))]
     pub username: Option<String>,
@@ -45,10 +45,25 @@ pub struct UpdateUserModel {
     pub first_name: Option<String>,
     #[validate(length(min = 1, message = "Last name cannot be empty"))]
     pub last_name: Option<String>,
+    #[serde(default, deserialize_with = "double_option")]
     pub avatar_url: Option<Option<String>>,
+    #[serde(default, deserialize_with = "double_option")]
     pub bio: Option<Option<String>>,
     #[validate(length(min = 10, message = "Phone number must be at least 10 digits long"))]
+    #[serde(default, deserialize_with = "double_option")]
     pub phone: Option<Option<String>>,
+}
+
+impl UpdateUserModel {
+    pub fn is_empty(&self) -> bool {
+        self.username.is_none()
+            && self.email.is_none()
+            && self.first_name.is_none()
+            && self.last_name.is_none()
+            && self.avatar_url.is_none()
+            && self.bio.is_none()
+            && self.phone.is_none()
+    }
 }
 
 pub struct InsertUser {

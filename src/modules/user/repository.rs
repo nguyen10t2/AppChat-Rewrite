@@ -11,6 +11,6 @@ pub trait UserRepository {
     async fn find_by_username(&self, username: &str) -> Result<Option<UserEntity>, error::SystemError>;
     async fn create(&self, user: &InsertUser) -> Result<Uuid, error::SystemError>;
     #[allow(unused)]
-    async fn update(&self, id: &Uuid, user: &UpdateUser) -> Result<(), error::SystemError>;
+    async fn update(&self, id: &Uuid, user: &UpdateUser) -> Result<UserEntity, error::SystemError>;
     async fn delete(&self, id: &Uuid) -> Result<bool, error::SystemError>;
 }

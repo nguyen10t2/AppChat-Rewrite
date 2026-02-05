@@ -1,10 +1,13 @@
+use actix_web::{FromRequest, web};
 use argon2::{
     Argon2, PasswordVerifier,
     password_hash::{Error as PasswordHashError, PasswordHash, PasswordHasher, SaltString},
 };
+use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::rngs::OsRng;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer};
+use validator::Validate;
 
 use crate::{api::error, modules::user::schema::UserRole};
 
@@ -72,5 +75,37 @@ impl Claims {
         validation.validate_nbf = false;
         let token_data = decode::<Self>(token, &DecodingKey::from_secret(secret), &validation)?;
         Ok(token_data.claims)
+    }
+}
+
+pub fn double_option<'de, T, D>(de: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(de).map(Some)
+}
+pub struct ValidatedJson<T>(pub T);
+
+impl<T> FromRequest for ValidatedJson<T>
+where
+    T: Validate + serde::de::DeserializeOwned + 'static,
+{
+    type Error = error::Error;
+    type Future = LocalBoxFuture<'static, Result<Self, Self::Error>>;
+
+    fn from_request(
+        req: &actix_web::HttpRequest,
+        payload: &mut actix_web::dev::Payload,
+    ) -> Self::Future {
+        let fut = web::Json::<serde_json::Value>::from_request(req, payload);
+
+        Box::pin(async move {
+            let json = fut.await.map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
+            let model: T = serde_json::from_value(json.into_inner())
+                .map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
+            model.validate().map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
+            Ok(ValidatedJson(model))
+        })
     }
 }

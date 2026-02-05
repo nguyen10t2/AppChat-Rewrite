@@ -4,6 +4,7 @@ use std::borrow::Cow;
 
 #[derive(serde::Serialize)]
 pub struct SuccessData<T: serde::Serialize> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
     pub message: Option<Cow<'static, str>>,
 }
