@@ -56,7 +56,7 @@ where
     move |req: ServiceRequest, next: Next<B>| {
         let roles = allowd_roles.clone();
         async move {
-            let role = get_claims(&req.request())?.role;
+            let role = get_claims(req.request())?.role;
 
             if !roles.contains(&role) {
                 return Err(error::Error::forbidden("No permission").into());

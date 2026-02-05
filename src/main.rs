@@ -18,11 +18,11 @@ mod middlewares;
 mod modules;
 mod utils;
 
-pub static ENV: LazyLock<constants::ENV> = LazyLock::new(|| {
+pub static ENV: LazyLock<constants::Env> = LazyLock::new(|| {
     dotenvy::dotenv().ok();
     env_logger::init();
     log::info!("Environment variables loaded from .env file");
-    constants::ENV::new()
+    constants::Env::new()
 });
 
 #[actix_web::get("/")]
@@ -33,11 +33,11 @@ async fn health_check() -> &'static str {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let db_pool = connect_database().await.map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::Other, "Database connection error")
+        std::io::Error::other("Database connection error")
     })?;
 
     let redis_pool = RedisCache::new().await.map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::Other, "Redis connection error")
+        std::io::Error::other("Redis connection error")
     })?;
 
     let _user_repo = UserRepositoryPg::new(db_pool);

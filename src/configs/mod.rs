@@ -9,7 +9,7 @@ pub async fn connect_database() -> Result<PgPool, error::SystemError> {
         .max_connections(5)
         .min_connections(1)
         .acquire_slow_threshold(std::time::Duration::from_secs(3))
-        .connect(&database_url)
+        .connect(database_url)
         .await?;
     Ok(pool)
 }

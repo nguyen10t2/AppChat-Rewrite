@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Conflict: {0}")]
     Conflict(Cow<'static, str>),
     #[error("Internal Server Error")]
-    InternalError,
+    InternalServer,
 }
 
 #[derive(serde::Serialize)]
@@ -46,8 +46,8 @@ impl Error {
         Self::Conflict(msg.into())
     }
 
-    pub fn internal_error() -> Self {
-        Self::InternalError
+    pub fn internal_server_error() -> Self {
+        Self::InternalServer
     }
 }
 
@@ -59,7 +59,7 @@ impl ResponseError for Error {
             Error::Forbidden(_) => StatusCode::FORBIDDEN,
             Error::NotFound(_) => StatusCode::NOT_FOUND,
             Error::Conflict(_) => StatusCode::CONFLICT,
-            Error::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InternalServer => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -74,7 +74,7 @@ impl ResponseError for Error {
                 HttpResponse::build(self.status_code()).json(ErrorBody { message: msg.clone() })
             }
             // No Message
-            Error::InternalError => {
+            Error::InternalServer => {
                 HttpResponse::build(self.status_code())
                     .json(ErrorBody { message: "Internal Server Error".into() })
             }
@@ -127,7 +127,7 @@ fn conflict_message(meta: &Option<DbErrorMeta>) -> Cow<'static, str> {
         return "Duplicate value".into();
     };
 
-    let field = constraint.split('_').last().unwrap_or("value");
+    let field = constraint.split('_').next_back().unwrap_or("value");
 
     let mut chars = field.chars();
     let field = match chars.next() {
@@ -154,8 +154,8 @@ impl From<SystemError> for Error {
             SystemError::NotFound(msg) => Error::NotFound(msg),
             SystemError::Conflict(meta) => Error::Conflict(conflict_message(&meta)),
             _ => {
-                log::error!("Internal Error: {:?}", value);
-                Error::InternalError
+                log::error!("Internal Server Error: {:?}", value);
+                Error::InternalServer
             }
         }
     }

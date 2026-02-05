@@ -1,4 +1,4 @@
-pub struct ENV {
+pub struct Env {
     pub jwt_secret: String,
     pub access_token_expiration: u64,
     pub refresh_token_expiration: u64,
@@ -8,7 +8,7 @@ pub struct ENV {
     pub port: u16,
 }
 
-impl ENV {
+impl Env {
     pub fn new() -> Self {
         let jwt_secret = std::env::var("SECRET_KEY")
             .expect("SECRET_KEY must be set in .env file or environment variable");
@@ -32,6 +32,6 @@ impl ENV {
             .unwrap_or_else(|_| "8080".to_string())
             .parse::<u16>()
             .expect("PORT must be a valid u16 integer");
-        ENV { jwt_secret, access_token_expiration, refresh_token_expiration, database_url, redis_url, ip, port }
+        Env { jwt_secret, access_token_expiration, refresh_token_expiration, database_url, redis_url, ip, port }
     }
 }
