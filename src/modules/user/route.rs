@@ -8,5 +8,5 @@ pub fn public_api_configure(cfg: &mut ServiceConfig) {
 }
 
 pub fn configure(cfg: &mut ServiceConfig) {
-    cfg.service(scope("/users").service(update_user).service(get_profile).service(get_user));
+    cfg.service(scope("/users").service(update_user).service(get_profile).service(get_user).service(delete_user));
 }
