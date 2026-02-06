@@ -1,15 +1,20 @@
 use actix_web::{
-    self, App, HttpServer,
-    middleware::{Logger, from_fn},
-    web,
+    self,
+    middleware::{from_fn, Logger},
+    web, App, HttpServer,
 };
 use std::sync::{Arc, LazyLock};
 
 use crate::{
-    configs::{RedisCache, connect_database},
+    configs::{connect_database, RedisCache},
     middlewares::{authentication, authorization},
     modules::{
+        conversation::{
+            repository_pg::{ConversationPgRepository, ParticipantPgRepository},
+            service::ConversationService,
+        },
         friend::{repository_pg::FriendRepositoryPg, service::FriendService},
+        message::repository_pg::MessageRepositoryPg,
         user::{repository_pg::UserRepositoryPg, schema::UserRole, service::UserService},
     },
     test::*,
@@ -45,11 +50,20 @@ async fn main() -> std::io::Result<()> {
 
     let _user_repo = UserRepositoryPg::new(db_pool.clone());
     let _friend_repo = FriendRepositoryPg::new(db_pool.clone());
+    let _participant_repo = ParticipantPgRepository::default();
+    let _message_repo = MessageRepositoryPg::new(db_pool.clone());
+    let _conversation_repo =
+        ConversationPgRepository::new(db_pool.clone(), _participant_repo.clone());
 
     let user_service =
         UserService::with_dependencies(Arc::new(_user_repo.clone()), Arc::new(redis_pool.clone()));
     let friend_service =
         FriendService::with_dependencies(Arc::new(_friend_repo), Arc::new(_user_repo.clone()));
+    let conversation_service = ConversationService::with_dependencies(
+        Arc::new(_conversation_repo),
+        Arc::new(_participant_repo),
+        Arc::new(_message_repo),
+    );
 
     println!("Starting server at http://{}:{}", ENV.ip.as_str(), ENV.port);
     HttpServer::new(move || {
@@ -58,6 +72,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(friend_service.clone()))
             .app_data(web::Data::new(db_pool.clone()))
+            .app_data(web::Data::new(conversation_service.clone()))
             .service(health_check)
             .service(
                 web::scope("/api").configure(modules::user::route::public_api_configure).service(
@@ -65,7 +80,8 @@ async fn main() -> std::io::Result<()> {
                         .wrap(from_fn(authorization(vec![UserRole::User])))
                         .wrap(from_fn(authentication))
                         .configure(modules::user::route::configure)
-                        .configure(modules::friend::route::configure),
+                        .configure(modules::friend::route::configure)
+                        .configure(modules::conversation::route::configure),
                 ),
             )
     })

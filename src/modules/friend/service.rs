@@ -83,13 +83,11 @@ where
             (receiver_id, sender_id)
         };
 
+        let pool = self.friend_repo.get_pool();
+
         let (friends, requests): (Option<FriendEntity>, Option<FriendRequestEntity>) = tokio::try_join!(
-            self.friend_repo.find_friendship(&u1, &u2, self.friend_repo.get_pool()),
-            self.friend_repo.find_friend_request(
-                &sender_id,
-                &receiver_id,
-                self.friend_repo.get_pool()
-            ),
+            self.friend_repo.find_friendship(&u1, &u2, pool),
+            self.friend_repo.find_friend_request(&sender_id, &receiver_id, pool),
         )?;
 
         if friends.is_some() {
@@ -102,7 +100,7 @@ where
 
         let friend_request = self
             .friend_repo
-            .create_friend_request(&sender_id, &receiver_id, &message, self.friend_repo.get_pool())
+            .create_friend_request(&sender_id, &receiver_id, &message, pool)
             .await?;
 
         Ok(friend_request)
@@ -153,9 +151,11 @@ where
         user_id: Uuid,
         request_id: Uuid,
     ) -> Result<(), error::SystemError> {
+        let pool = self.friend_repo.get_pool();
+
         let request = self
             .friend_repo
-            .find_friend_request_by_id(&request_id, self.friend_repo.get_pool())
+            .find_friend_request_by_id(&request_id, pool)
             .await?
             .ok_or_else(|| error::SystemError::not_found("Friend request not found"))?;
 
@@ -165,7 +165,7 @@ where
             ));
         }
 
-        self.friend_repo.delete_friend_request(&request_id, self.friend_repo.get_pool()).await?;
+        self.friend_repo.delete_friend_request(&request_id, pool).await?;
 
         Ok(())
     }
@@ -174,9 +174,10 @@ where
         &self,
         user_id: Uuid,
     ) -> Result<Vec<FriendRequestResponse>, error::SystemError> {
+        let pool = self.friend_repo.get_pool();
         let (requests_to, requests_from) = tokio::try_join!(
-            self.friend_repo.find_friend_request_to_user(&user_id, self.friend_repo.get_pool()),
-            self.friend_repo.find_friend_request_from_user(&user_id, self.friend_repo.get_pool()),
+            self.friend_repo.find_friend_request_to_user(&user_id, pool),
+            self.friend_repo.find_friend_request_from_user(&user_id, pool),
         )?;
 
         let mut all = Vec::with_capacity(requests_to.len() + requests_from.len());

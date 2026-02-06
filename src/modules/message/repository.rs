@@ -11,6 +11,6 @@ pub trait MessageRepository {
     async fn find_by_query(
         &self,
         query: &MessageQuery,
-        limit: usize,
+        limit: i32,
     ) -> Result<Vec<MessageEntity>, error::SystemError>;
 }

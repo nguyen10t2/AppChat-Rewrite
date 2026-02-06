@@ -5,6 +5,7 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 pub struct MessageRepositoryPg {
     pool: sqlx::PgPool,
 }
@@ -40,28 +41,26 @@ impl MessageRepository for MessageRepositoryPg {
     async fn find_by_query(
         &self,
         query: &message::model::MessageQuery,
-        limit: usize,
+        limit: i32,
     ) -> Result<Vec<MessageEntity>, error::SystemError> {
         // has index on (conversation_id, created_at DESC NULLS LAST) where deleted_at IS NULL
 
-        let messages = if let Some(created_at) = query.created_at {
-            sqlx::query_as::<_, MessageEntity>(
-                "SELECT * FROM messages WHERE conversation_id = $1 AND created_at < $2 AND deleted_at IS NULL ORDER BY created_at DESC NULLS LAST LIMIT $3",
-            )
-            .bind(query.conversation_id)
-            .bind(created_at)
-            .bind(limit as i64)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, MessageEntity>(
-                "SELECT * FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC NULLS LAST LIMIT $2",
-            )
-            .bind(query.conversation_id)
-            .bind(limit as i64)
-            .fetch_all(&self.pool)
-            .await?
-        };
+        let messages = sqlx::query_as::<_, MessageEntity>(
+            r#"
+            SELECT id, content, conversation_id, sender_id, created_at
+            FROM messages
+            WHERE conversation_id = $1
+              AND deleted_at IS NULL
+              AND ($2::timestamptz IS NULL OR created_at < $2)
+            ORDER BY created_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(query.conversation_id)
+        .bind(query.created_at)
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(messages)
     }

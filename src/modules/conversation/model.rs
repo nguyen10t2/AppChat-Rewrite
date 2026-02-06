@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::modules::conversation::schema::ConversationType;
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
 pub struct GroupInfo {
     pub name: String,
     pub created_by: Uuid,
@@ -27,7 +29,7 @@ pub struct ConversationRaw {
     pub last_created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
 pub struct ParticipantRow {
     pub user_id: Uuid,
     pub display_name: String,
@@ -36,7 +38,7 @@ pub struct ParticipantRow {
     pub joined_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
 pub struct LastMessageRow {
     pub content: Option<String>,
     pub sender_id: Uuid,
@@ -54,7 +56,7 @@ pub struct ConversationRow {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
 pub struct ConversationDetail {
     pub conversation_id: Uuid,
     #[sqlx(rename = "type")]
@@ -64,4 +66,45 @@ pub struct ConversationDetail {
     pub participants: Vec<ParticipantRow>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, Deserialize, Serialize, Validate)]
+pub struct NewConversation {
+    pub _type: ConversationType,
+    pub name: String,
+    #[validate(length(min = 1))]
+    pub member_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct NewParticipant {
+    pub conversation_id: Uuid,
+    pub user_id: Uuid,
+    pub unread_count: i32,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ParticipantDetailWithConversation {
+    pub user_id: Uuid,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+    pub unread_count: i32,
+    pub joined_at: chrono::DateTime<chrono::Utc>,
+
+    pub conversation_id: Uuid,
+}
+
+#[allow(unused)]
+#[derive(Debug, Clone, FromRow)]
+pub struct NewLastMessage {
+    pub conversation_id: Uuid,
+    pub sender_id: Uuid,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct MessageQueryRequest {
+    #[validate(range(min = 1, max = 50))]
+    pub limit: i32,
+    pub cursor: Option<String>,
 }

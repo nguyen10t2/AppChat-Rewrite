@@ -1,29 +1,35 @@
 use uuid::Uuid;
 
 use crate::modules::conversation::model::{
-    ConversationDetail, ConversationRaw, ConversationRow, GroupInfo, LastMessageRow, ParticipantRow,
+    ConversationDetail, ConversationRaw, ConversationRow, GroupInfo, LastMessageRow,
+    NewLastMessage, NewParticipant, ParticipantDetailWithConversation, ParticipantRow,
 };
-use crate::modules::conversation::repository::ConversationRepository;
-use crate::modules::conversation::schema::ConversationType;
+use crate::modules::conversation::repository::{
+    ConversationRepository, LastMessageRepository, ParticipantRepository,
+};
+use crate::modules::conversation::schema::{
+    ConversationType, LastMessageEntity, PartacipantEntity,
+};
 use crate::{api::error, modules::conversation::schema::ConversationEntity};
 
 #[derive(Clone)]
 pub struct ConversationPgRepository {
     pool: sqlx::PgPool,
+    participant_repo: ParticipantPgRepository,
 }
 
 impl ConversationPgRepository {
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
-    }
-
-    pub fn get_pool(&self) -> &sqlx::PgPool {
-        &self.pool
+    pub fn new(pool: sqlx::PgPool, participant_repo: ParticipantPgRepository) -> Self {
+        Self { pool, participant_repo }
     }
 }
 
 #[async_trait::async_trait]
 impl ConversationRepository for ConversationPgRepository {
+    fn get_pool(&self) -> &sqlx::Pool<sqlx::Postgres> {
+        &self.pool
+    }
+
     async fn find_by_id<'e, E>(
         &self,
         conversation_id: &Uuid,
@@ -147,6 +153,39 @@ impl ConversationRepository for ConversationPgRepository {
         .bind(_type)
         .fetch_one(tx)
         .await?;
+
+        Ok(conversation)
+    }
+
+    async fn create_direct_conversation<'e>(
+        &self,
+        user_a: &Uuid,
+        user_b: &Uuid,
+        tx: &mut sqlx::Transaction<'e, sqlx::Postgres>,
+    ) -> Result<ConversationEntity, error::SystemError> {
+        let conversation = self.create(&ConversationType::Direct, tx.as_mut()).await?;
+
+        self.participant_repo
+            .create_participant(
+                &NewParticipant {
+                    conversation_id: conversation.id,
+                    user_id: *user_a,
+                    unread_count: 0,
+                },
+                tx.as_mut(),
+            )
+            .await?;
+
+        self.participant_repo
+            .create_participant(
+                &NewParticipant {
+                    conversation_id: conversation.id,
+                    user_id: *user_b,
+                    unread_count: 0,
+                },
+                tx.as_mut(),
+            )
+            .await?;
 
         Ok(conversation)
     }
@@ -297,5 +336,166 @@ impl ConversationRepository for ConversationPgRepository {
             .collect();
 
         Ok(result)
+    }
+}
+
+#[derive(Clone)]
+pub struct ParticipantPgRepository {}
+
+impl Default for ParticipantPgRepository {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait::async_trait]
+impl ParticipantRepository for ParticipantPgRepository {
+    async fn create_participant<'e, E>(
+        &self,
+        participant: &NewParticipant,
+        tx: E,
+    ) -> Result<PartacipantEntity, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let entity = sqlx::query_as::<_, PartacipantEntity>(
+            r#"
+            INSERT INTO participants (conversation_id, user_id, unread_count)
+            VALUES ($1, $2, $3)
+            RETURNING *
+            "#,
+        )
+        .bind(participant.conversation_id)
+        .bind(participant.user_id)
+        .bind(participant.unread_count)
+        .fetch_one(tx)
+        .await?;
+
+        Ok(entity)
+    }
+
+    async fn increment_unread_count<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query(
+            r#"
+            UPDATE participants
+            SET unread_count = unread_count + 1
+            WHERE conversation_id = $1
+            AND user_id = $2
+            AND deleted_at IS NULL
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .execute(tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn reset_unread_count<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query(
+            r#"
+            UPDATE participants
+            SET unread_count = 0
+            WHERE conversation_id = $1
+            AND user_id = $2
+            AND deleted_at IS NULL
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .execute(tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn find_participants_by_conversation_id<'e, E>(
+        &self,
+        conversation_ids: &[Uuid],
+        tx: E,
+    ) -> Result<Vec<ParticipantDetailWithConversation>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let participants = sqlx::query_as::<_, ParticipantDetailWithConversation>(
+            r#"
+            SELECT
+                p.conversation_id,
+                p.user_id,
+                u.display_name,
+                u.avatar_url,
+                p.unread_count,
+                p.joined_at
+            FROM participants p
+            JOIN users u ON u.id = p.user_id
+            WHERE p.conversation_id = ANY($1)
+            AND p.deleted_at IS NULL
+            "#,
+        )
+        .bind(conversation_ids)
+        .fetch_all(tx)
+        .await?;
+
+        Ok(participants)
+    }
+}
+
+#[allow(unused)]
+#[derive(Clone)]
+pub struct LastMessagePgRepository {}
+
+impl Default for LastMessagePgRepository {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait::async_trait]
+impl LastMessageRepository for LastMessagePgRepository {
+    async fn upsert_last_message<'e, E>(
+        &self,
+        last_message: &NewLastMessage,
+        tx: E,
+    ) -> Result<LastMessageEntity, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let id = Uuid::now_v7();
+        let res = sqlx::query_as::<_, LastMessageEntity>(
+            r#"
+            INSERT INTO last_messages (id, content, conversation_id, sender_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (conversation_id) DO UPDATE
+            SET content = EXCLUDED.content,
+                sender_id = EXCLUDED.sender_id,
+                created_at = NOW()
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(&last_message.content)
+        .bind(last_message.conversation_id)
+        .bind(last_message.sender_id)
+        .fetch_one(tx)
+        .await?;
+
+        Ok(res)
     }
 }

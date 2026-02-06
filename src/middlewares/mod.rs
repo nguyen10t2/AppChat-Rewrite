@@ -44,7 +44,7 @@ pub fn get_claims(req: &HttpRequest) -> Result<Claims, error::Error> {
 }
 
 pub fn authorization<B>(
-    allowd_roles: Vec<UserRole>,
+    allowed_roles: Vec<UserRole>,
 ) -> impl Fn(
     ServiceRequest,
     Next<B>,
@@ -52,7 +52,7 @@ pub fn authorization<B>(
 where
     B: MessageBody + 'static,
 {
-    let allowd_roles = Rc::new(allowd_roles);
+    let allowd_roles = Rc::new(allowed_roles);
     move |req: ServiceRequest, next: Next<B>| {
         let roles = allowd_roles.clone();
         async move {

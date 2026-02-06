@@ -12,7 +12,7 @@ pub enum MessageType {
     System,
 }
 
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, Serialize)]
 pub struct MessageEntity {
     pub id: Uuid,
     pub conversation_id: Uuid,
