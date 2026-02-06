@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::modules::user::schema::UserEntity;
 
@@ -49,7 +50,7 @@ pub struct FriendRequestResponse {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendRequestBody {
     pub recipient_id: Uuid,

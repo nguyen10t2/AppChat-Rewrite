@@ -15,14 +15,20 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct FriendService {
-    friend_repo: Arc<dyn FriendRepo + Send + Sync>,
+pub struct FriendService<R>
+where
+    R: FriendRepo + Send + Sync + 'static,
+{
+    friend_repo: Arc<R>,
     user_repo: Arc<dyn UserRepository + Send + Sync>,
 }
 
-impl FriendService {
+impl<R> FriendService<R>
+where
+    R: FriendRepo + Send + Sync + 'static,
+{
     pub fn with_dependencies(
-        friend_repo: Arc<dyn FriendRepo + Send + Sync>,
+        friend_repo: Arc<R>,
         user_repo: Arc<dyn UserRepository + Send + Sync>,
     ) -> Self {
         FriendService { friend_repo, user_repo }
@@ -34,7 +40,10 @@ impl FriendService {
         user_id: Uuid,
         friend_id: Uuid,
     ) -> Result<bool, error::SystemError> {
-        let friendship = self.friend_repo.find_friendship(&user_id, &friend_id).await?;
+        let friendship = self
+            .friend_repo
+            .find_friendship(&user_id, &friend_id, self.friend_repo.get_pool())
+            .await?;
         Ok(friendship.is_some())
     }
 
@@ -42,7 +51,7 @@ impl FriendService {
         &self,
         user_id: Uuid,
     ) -> Result<Vec<FriendResponse>, error::SystemError> {
-        let friends = self.friend_repo.find_friends(&user_id).await?;
+        let friends = self.friend_repo.find_friends(&user_id, self.friend_repo.get_pool()).await?;
         Ok(friends)
     }
 
@@ -51,7 +60,7 @@ impl FriendService {
         user_id: Uuid,
         friend_id: Uuid,
     ) -> Result<(), error::SystemError> {
-        self.friend_repo.delete_friendship(&user_id, &friend_id).await
+        self.friend_repo.delete_friendship(&user_id, &friend_id, self.friend_repo.get_pool()).await
     }
 
     pub async fn send_friend_request(
@@ -75,8 +84,12 @@ impl FriendService {
         };
 
         let (friends, requests): (Option<FriendEntity>, Option<FriendRequestEntity>) = tokio::try_join!(
-            self.friend_repo.find_friendship(&u1, &u2),
-            self.friend_repo.find_friend_request(&sender_id, &receiver_id),
+            self.friend_repo.find_friendship(&u1, &u2, self.friend_repo.get_pool()),
+            self.friend_repo.find_friend_request(
+                &sender_id,
+                &receiver_id,
+                self.friend_repo.get_pool()
+            ),
         )?;
 
         if friends.is_some() {
@@ -87,8 +100,10 @@ impl FriendService {
             return Err(error::SystemError::bad_request("Friend request already exists"));
         }
 
-        let friend_request =
-            self.friend_repo.create_friend_request(&sender_id, &receiver_id, &message).await?;
+        let friend_request = self
+            .friend_repo
+            .create_friend_request(&sender_id, &receiver_id, &message, self.friend_repo.get_pool())
+            .await?;
 
         Ok(friend_request)
     }
@@ -98,12 +113,35 @@ impl FriendService {
         user_id: Uuid,
         request_id: Uuid,
     ) -> Result<FriendResponse, error::SystemError> {
-        let friend_id =
-            self.friend_repo.accept_friend_request_atomic(&request_id, &user_id).await?;
+        let mut tx = self.friend_repo.get_pool().begin().await?;
+
+        let request = self
+            .friend_repo
+            .find_friend_request_by_id(&request_id, tx.as_mut())
+            .await?
+            .ok_or_else(|| error::SystemError::not_found("Friend request not found"))?;
+
+        if request.to_user_id != user_id {
+            return Err(error::SystemError::forbidden(
+                "You are not allowed to accept this friend request",
+            ));
+        }
+
+        let (u1, u2) = if request.from_user_id <= request.to_user_id {
+            (request.from_user_id, request.to_user_id)
+        } else {
+            (request.to_user_id, request.from_user_id)
+        };
+
+        self.friend_repo.create_friendship(&u1, &u2, tx.as_mut()).await?;
+
+        self.friend_repo.delete_friend_request(&request_id, tx.as_mut()).await?;
+
+        tx.commit().await?;
 
         let from_user = self
             .user_repo
-            .find_by_id(&friend_id)
+            .find_by_id(&request.from_user_id)
             .await?
             .ok_or_else(|| error::SystemError::not_found("User not found"))?;
 
@@ -117,7 +155,7 @@ impl FriendService {
     ) -> Result<(), error::SystemError> {
         let request = self
             .friend_repo
-            .find_friend_request_by_id(&request_id)
+            .find_friend_request_by_id(&request_id, self.friend_repo.get_pool())
             .await?
             .ok_or_else(|| error::SystemError::not_found("Friend request not found"))?;
 
@@ -127,7 +165,7 @@ impl FriendService {
             ));
         }
 
-        self.friend_repo.delete_friend_request(&request_id).await?;
+        self.friend_repo.delete_friend_request(&request_id, self.friend_repo.get_pool()).await?;
 
         Ok(())
     }
@@ -137,8 +175,8 @@ impl FriendService {
         user_id: Uuid,
     ) -> Result<Vec<FriendRequestResponse>, error::SystemError> {
         let (requests_to, requests_from) = tokio::try_join!(
-            self.friend_repo.find_friend_request_to_user(&user_id),
-            self.friend_repo.find_friend_request_from_user(&user_id),
+            self.friend_repo.find_friend_request_to_user(&user_id, self.friend_repo.get_pool()),
+            self.friend_repo.find_friend_request_from_user(&user_id, self.friend_repo.get_pool()),
         )?;
 
         let mut all = Vec::with_capacity(requests_to.len() + requests_from.len());

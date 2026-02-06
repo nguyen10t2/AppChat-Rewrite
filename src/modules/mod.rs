@@ -28,3 +28,13 @@ pub mod message {
     pub mod schema;
     pub mod service;
 }
+
+pub mod conversation {
+    pub mod handle;
+    pub mod model;
+    pub mod repository;
+    pub mod repository_pg;
+    pub mod route;
+    pub mod schema;
+    pub mod service;
+}

@@ -11,18 +11,6 @@ pub enum UserRole {
     User,
 }
 
-impl TryFrom<&str> for UserRole {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "Admin" => Ok(UserRole::Admin),
-            "User" => Ok(UserRole::User),
-            _ => Err(()),
-        }
-    }
-}
-
 #[allow(unused)]
 #[derive(Debug, Clone, FromRow)]
 pub struct UserEntity {

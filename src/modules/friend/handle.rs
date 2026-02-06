@@ -6,14 +6,17 @@ use crate::{
     middlewares::get_claims,
     modules::friend::{
         model::{FriendRequestBody, FriendRequestResponse, FriendResponse},
+        repository_pg::FriendRepositoryPg,
         schema::FriendRequestEntity,
         service::FriendService,
     },
 };
 
+type FriendSvc = FriendService<FriendRepositoryPg>;
+
 #[post("/requests")]
 pub async fn send_friend_request(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     body: web::Json<FriendRequestBody>,
     req: HttpRequest,
 ) -> Result<success::Success<FriendRequestEntity>, error::Error> {
@@ -27,7 +30,7 @@ pub async fn send_friend_request(
 
 #[post("/requests/{request_id}/accept")]
 pub async fn accept_friend_request(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     request_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<FriendResponse>, error::Error> {
@@ -39,7 +42,7 @@ pub async fn accept_friend_request(
 
 #[post("/requests/{request_id}/decline")]
 pub async fn decline_friend_request(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     request_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {
@@ -50,7 +53,7 @@ pub async fn decline_friend_request(
 
 #[get("/")]
 pub async fn list_friends(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<Vec<FriendResponse>>, error::Error> {
     let user_id = get_claims(&req)?.sub;
@@ -61,7 +64,7 @@ pub async fn list_friends(
 
 #[get("/requests")]
 pub async fn list_friend_requests(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<Vec<FriendRequestResponse>>, error::Error> {
     let user_id = get_claims(&req)?.sub;
@@ -72,7 +75,7 @@ pub async fn list_friend_requests(
 
 #[delete("/{friend_id}")]
 pub async fn remove_friend(
-    friend_service: web::Data<FriendService>,
+    friend_service: web::Data<FriendSvc>,
     friend_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {

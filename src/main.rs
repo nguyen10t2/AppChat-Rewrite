@@ -12,6 +12,7 @@ use crate::{
         friend::{repository_pg::FriendRepositoryPg, service::FriendService},
         user::{repository_pg::UserRepositoryPg, schema::UserRole, service::UserService},
     },
+    test::*,
 };
 
 mod api;
@@ -19,6 +20,7 @@ mod configs;
 mod constants;
 mod middlewares;
 mod modules;
+mod test;
 mod utils;
 
 pub static ENV: LazyLock<constants::Env> = LazyLock::new(|| {
@@ -29,7 +31,7 @@ pub static ENV: LazyLock<constants::Env> = LazyLock::new(|| {
 });
 
 #[actix_web::get("/")]
-async fn health_check() -> &'static str {
+async fn health_check(db_pool: web::Data<sqlx::PgPool>) -> &'static str {
     "Server is running"
 }
 
@@ -55,6 +57,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(friend_service.clone()))
+            .app_data(web::Data::new(db_pool.clone()))
             .service(health_check)
             .service(
                 web::scope("/api").configure(modules::user::route::public_api_configure).service(

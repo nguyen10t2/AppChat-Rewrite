@@ -22,11 +22,15 @@ impl FriendRepositoryPg {
 
 #[async_trait::async_trait]
 impl FriendRepository for FriendRepositoryPg {
-    async fn find_friendship(
+    async fn find_friendship<'e, E>(
         &self,
         user_id_a: &Uuid,
         user_id_b: &Uuid,
-    ) -> Result<Option<FriendEntity>, error::SystemError> {
+        tx: E,
+    ) -> Result<Option<FriendEntity>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let (user_a, user_b) =
             if user_id_a <= user_id_b { (user_id_a, user_id_b) } else { (user_id_b, user_id_a) };
 
@@ -35,16 +39,20 @@ impl FriendRepository for FriendRepositoryPg {
         )
         .bind(user_a)
         .bind(user_b)
-        .fetch_optional(&self.pool)
+        .fetch_optional(tx)
         .await?;
 
         Ok(friendship)
     }
 
-    async fn find_friends(
+    async fn find_friends<'e, E>(
         &self,
         user_id: &Uuid,
-    ) -> Result<Vec<FriendResponse>, error::SystemError> {
+        tx: E,
+    ) -> Result<Vec<FriendResponse>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let friends = sqlx::query_as::<_, FriendResponse>(
             r#"
         SELECT
@@ -64,43 +72,49 @@ impl FriendRepository for FriendRepositoryPg {
         "#,
         )
         .bind(user_id)
-        .fetch_all(&self.pool)
+        .fetch_all(tx)
         .await?;
 
         Ok(friends)
     }
 
-    async fn create_friendship(
+    async fn create_friendship<'e, E>(
         &self,
         user_id_a: &Uuid,
         user_id_b: &Uuid,
-    ) -> Result<(), error::SystemError> {
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let (user_a, user_b) =
             if user_id_a <= user_id_b { (user_id_a, user_id_b) } else { (user_id_b, user_id_a) };
 
-        sqlx::query(
-            "INSERT INTO friends (user_a, user_b) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        )
-        .bind(user_a)
-        .bind(user_b)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT INTO friends (user_a, user_b) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+            .bind(user_a)
+            .bind(user_b)
+            .execute(tx)
+            .await?;
 
         Ok(())
     }
 
-    async fn delete_friendship(
+    async fn delete_friendship<'e, E>(
         &self,
         user_id_a: &Uuid,
         user_id_b: &Uuid,
-    ) -> Result<(), error::SystemError> {
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let (user_a, user_b) =
             if user_id_a <= user_id_b { (user_id_a, user_id_b) } else { (user_id_b, user_id_a) };
 
         sqlx::query("DELETE FROM friends WHERE user_a = $1 AND user_b = $2")
             .bind(user_a)
             .bind(user_b)
-            .execute(&self.pool)
+            .execute(tx)
             .await?;
 
         Ok(())
@@ -109,11 +123,15 @@ impl FriendRepository for FriendRepositoryPg {
 
 #[async_trait::async_trait]
 impl FriendRequestRepository for FriendRepositoryPg {
-    async fn find_friend_request(
+    async fn find_friend_request<'e, E>(
         &self,
         sender_id: &Uuid,
         receiver_id: &Uuid,
-    ) -> Result<Option<FriendRequestEntity>, error::SystemError> {
+        tx: E,
+    ) -> Result<Option<FriendRequestEntity>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let request = sqlx::query_as::<_, FriendRequestEntity>(
             r#"
             SELECT *
@@ -125,29 +143,37 @@ impl FriendRequestRepository for FriendRepositoryPg {
         )
         .bind(sender_id)
         .bind(receiver_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(tx)
         .await?;
 
         Ok(request)
     }
 
-    async fn find_friend_request_by_id(
+    async fn find_friend_request_by_id<'e, E>(
         &self,
         request_id: &Uuid,
-    ) -> Result<Option<FriendRequestEntity>, error::SystemError> {
+        tx: E,
+    ) -> Result<Option<FriendRequestEntity>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let request =
             sqlx::query_as::<_, FriendRequestEntity>("SELECT * FROM friend_requests WHERE id = $1")
                 .bind(request_id)
-                .fetch_optional(&self.pool)
+                .fetch_optional(tx)
                 .await?;
 
         Ok(request)
     }
 
-    async fn find_friend_request_from_user(
+    async fn find_friend_request_from_user<'e, E>(
         &self,
         user_id: &Uuid,
-    ) -> Result<Vec<FriendRequestResponse>, error::SystemError> {
+        tx: E,
+    ) -> Result<Vec<FriendRequestResponse>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let rows = sqlx::query_as::<_, FriendUserRow>(
             r#"
             SELECT
@@ -166,7 +192,7 @@ impl FriendRequestRepository for FriendRepositoryPg {
             "#,
         )
         .bind(user_id)
-        .fetch_all(&self.pool)
+        .fetch_all(tx)
         .await?;
 
         Ok(rows
@@ -186,10 +212,14 @@ impl FriendRequestRepository for FriendRepositoryPg {
             .collect())
     }
 
-    async fn find_friend_request_to_user(
+    async fn find_friend_request_to_user<'e, E>(
         &self,
         user_id: &Uuid,
-    ) -> Result<Vec<FriendRequestResponse>, error::SystemError> {
+        tx: E,
+    ) -> Result<Vec<FriendRequestResponse>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let rows = sqlx::query_as::<_, FriendUserRow>(
             r#"
             SELECT
@@ -208,7 +238,7 @@ impl FriendRequestRepository for FriendRepositoryPg {
             "#,
         )
         .bind(user_id)
-        .fetch_all(&self.pool)
+        .fetch_all(tx)
         .await?;
 
         Ok(rows
@@ -228,85 +258,54 @@ impl FriendRequestRepository for FriendRepositoryPg {
             .collect())
     }
 
-    async fn create_friend_request(
+    async fn create_friend_request<'e, E>(
         &self,
         sender_id: &Uuid,
         receiver_id: &Uuid,
         message: &Option<String>,
-    ) -> Result<FriendRequestEntity, error::SystemError> {
+        tx: E,
+    ) -> Result<FriendRequestEntity, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let id = Uuid::now_v7();
         let request = sqlx::query_as::<_, FriendRequestEntity>(
             r#"
-            INSERT INTO friend_requests (from_user_id, to_user_id, message)
-            VALUES ($1, $2, $3)
+            INSERT INTO friend_requests (id, from_user_id, to_user_id, message)
+            VALUES ($1, $2, $3, $4)
             RETURNING *
             "#,
         )
+        .bind(id)
         .bind(sender_id)
         .bind(receiver_id)
         .bind(message)
-        .fetch_one(&self.pool)
+        .fetch_one(tx)
         .await?;
 
         Ok(request)
     }
 
-    async fn delete_friend_request(&self, request_id: &Uuid) -> Result<(), error::SystemError> {
-        {
-            sqlx::query("DELETE FROM friend_requests WHERE id = $1")
-                .bind(request_id)
-                .execute(&self.pool)
-                .await?;
+    async fn delete_friend_request<'e, E>(
+        &self,
+        request_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query("DELETE FROM friend_requests WHERE id = $1")
+            .bind(request_id)
+            .execute(tx)
+            .await?;
 
-            Ok(())
-        }
+        Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl FriendRepo for FriendRepositoryPg {
-    async fn accept_friend_request_atomic(
-        &self,
-        request_id: &Uuid,
-        user_id: &Uuid,
-    ) -> Result<Uuid, error::SystemError> {
-        let mut tx = self.pool.begin().await?;
-
-        let request = sqlx::query_as::<_, FriendRequestEntity>(
-            "SELECT * FROM friend_requests WHERE id = $1 FOR UPDATE",
-        )
-        .bind(request_id)
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| error::SystemError::not_found("Friend request not found"))?;
-
-        if request.to_user_id != *user_id {
-            tx.rollback().await?;
-            return Err(error::SystemError::forbidden(
-                "You are not allowed to accept this friend request",
-            ));
-        }
-
-        let (u1, u2) = if request.from_user_id <= request.to_user_id {
-            (request.from_user_id, request.to_user_id)
-        } else {
-            (request.to_user_id, request.from_user_id)
-        };
-
-        sqlx::query(
-            "INSERT INTO friends (user_a, user_b) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        )
-        .bind(u1)
-        .bind(u2)
-        .execute(&mut *tx)
-        .await?;
-
-        sqlx::query("DELETE FROM friend_requests WHERE id = $1")
-            .bind(request_id)
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
-
-        Ok(request.from_user_id)
+    fn get_pool(&self) -> &sqlx::PgPool {
+        &self.pool
     }
 }
