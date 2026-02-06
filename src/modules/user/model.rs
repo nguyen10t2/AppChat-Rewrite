@@ -1,6 +1,6 @@
 use core::str;
-use validator::Validate;
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
 use crate::modules::user::schema::UserEntity;
 

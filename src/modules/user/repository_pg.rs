@@ -9,6 +9,7 @@ use crate::{
     },
 };
 
+#[derive(Clone)]
 pub struct UserRepositoryPg {
     pool: sqlx::PgPool,
 }

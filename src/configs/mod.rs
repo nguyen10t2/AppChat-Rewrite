@@ -14,6 +14,7 @@ pub async fn connect_database() -> Result<PgPool, error::SystemError> {
     Ok(pool)
 }
 
+#[derive(Clone)]
 pub struct RedisCache {
     pool: deadpool_redis::Pool,
 }

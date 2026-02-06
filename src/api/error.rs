@@ -74,10 +74,8 @@ impl ResponseError for Error {
                 HttpResponse::build(self.status_code()).json(ErrorBody { message: msg.clone() })
             }
             // No Message
-            Error::InternalServer => {
-                HttpResponse::build(self.status_code())
-                    .json(ErrorBody { message: "Internal Server Error".into() })
-            }
+            Error::InternalServer => HttpResponse::build(self.status_code())
+                .json(ErrorBody { message: "Internal Server Error".into() }),
         }
     }
 }
@@ -115,7 +113,7 @@ pub enum SystemError {
     #[error("Database Conflict: {0:?}")]
     Conflict(Option<DbErrorMeta>),
     #[error("Internal System Error: {0}")]
-    InternalError(Box<dyn std::error::Error + Send + Sync>)
+    InternalError(Box<dyn std::error::Error + Send + Sync>),
 }
 
 fn conflict_message(meta: &Option<DbErrorMeta>) -> Cow<'static, str> {

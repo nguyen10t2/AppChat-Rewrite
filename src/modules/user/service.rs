@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::ENV;
 use crate::api::error;
 use crate::configs::RedisCache;
-use crate::modules::user::CACHE_TTL;
+use crate::modules::CACHE_TTL;
 use crate::modules::user::model::{
     SignInModel, SignUpModel, UpdateUser, UpdateUserModel, UserResponse,
 };

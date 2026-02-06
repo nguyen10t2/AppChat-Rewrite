@@ -1,12 +1,17 @@
 use actix_web::{
-    HttpRequest, cookie::{Cookie, time}, delete, get, patch, post, web
+    HttpRequest,
+    cookie::{Cookie, time},
+    delete, get, patch, post, web,
 };
 use uuid::Uuid;
 
-use crate::{api::{error, success}, utils::ValidatedJson};
 use crate::modules::user::model::SignUpResponse;
 use crate::modules::user::{model, service::UserService};
 use crate::{ENV, middlewares::get_claims};
+use crate::{
+    api::{error, success},
+    utils::ValidatedJson,
+};
 
 #[get("/profile")]
 pub async fn get_profile(
