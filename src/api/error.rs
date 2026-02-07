@@ -1,6 +1,6 @@
 #![allow(unused)]
-use actix_web::{HttpResponse, ResponseError, body, http::StatusCode};
-use deadpool_redis::{CreatePoolError, PoolError, redis::RedisError};
+use actix_web::{body, http::StatusCode, HttpResponse, ResponseError};
+use deadpool_redis::{redis::RedisError, CreatePoolError, PoolError};
 use serde_json::json;
 use std::borrow::Cow;
 
@@ -161,6 +161,7 @@ impl From<SystemError> for Error {
 
 impl From<sqlx::Error> for SystemError {
     fn from(err: sqlx::Error) -> Self {
+        log::error!("{:?}", err);
         if let sqlx::Error::Database(db_err) = &err {
             match db_err.code().as_deref() {
                 Some("23505") => {

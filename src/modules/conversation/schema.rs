@@ -25,7 +25,7 @@ pub struct PartacipantEntity {
     pub user_id: Uuid,
     pub unread_count: i32,
     pub joined_at: chrono::DateTime<chrono::Utc>,
-    pub departed_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, FromRow)]

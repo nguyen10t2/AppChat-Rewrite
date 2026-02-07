@@ -67,6 +67,15 @@ pub trait ConversationRepository {
     ) -> Result<Vec<ConversationRow>, error::SystemError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
+
+    async fn get_conversation_and_check_membership<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        tx: E,
+    ) -> Result<(Option<ConversationEntity>, bool), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 }
 
 #[async_trait::async_trait]

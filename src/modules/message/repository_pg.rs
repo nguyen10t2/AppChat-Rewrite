@@ -55,7 +55,7 @@ impl MessageRepository for MessageRepositoryPg {
 
         let messages = sqlx::query_as::<_, MessageEntity>(
             r#"
-            SELECT id, content, conversation_id, sender_id, created_at
+            SELECT *
             FROM messages
             WHERE conversation_id = $1
               AND deleted_at IS NULL

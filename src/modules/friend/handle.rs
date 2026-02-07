@@ -1,4 +1,4 @@
-use actix_web::{HttpRequest, delete, get, post, web};
+use actix_web::{delete, get, post, web, HttpRequest};
 use uuid::Uuid;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-type FriendSvc = FriendService<FriendRepositoryPg>;
+pub type FriendSvc = FriendService<FriendRepositoryPg>;
 
 #[post("/requests")]
 pub async fn send_friend_request(

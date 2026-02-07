@@ -1,3 +1,4 @@
+use sqlx::{FromRow, Row};
 use uuid::Uuid;
 
 use crate::modules::conversation::model::{
@@ -238,14 +239,22 @@ impl ConversationRepository for ConversationPgRepository {
             r#"
             SELECT c.*
             FROM conversations c
-            JOIN participants p
-            ON p.conversation_id = c.id
             WHERE c.type = 'direct'
-            AND p.user_id IN ($1, $2)
-            AND p.deleted_at IS NULL
-            GROUP BY c.id
-            HAVING COUNT(DISTINCT p.user_id) = 2
-            LIMIT 1
+            AND EXISTS (
+                SELECT 1
+                FROM participants p1
+                WHERE p1.conversation_id = c.id
+                AND p1.user_id = $1
+                AND p1.deleted_at IS NULL
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM participants p2
+                WHERE p2.conversation_id = c.id
+                AND p2.user_id = $2
+                AND p2.deleted_at IS NULL
+            )
+            LIMIT 1;
             "#,
         )
         .bind(user_a)
@@ -336,6 +345,42 @@ impl ConversationRepository for ConversationPgRepository {
             .collect();
 
         Ok(result)
+    }
+
+    async fn get_conversation_and_check_membership<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        tx: E,
+    ) -> Result<(Option<ConversationEntity>, bool), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        let row = sqlx::query(
+            r#"
+            SELECT c.*,
+                EXISTS(
+                SELECT 1
+                FROM participants p
+                WHERE p.conversation_id = c.id
+                AND p.user_id = $2
+                ) as is_member
+            FROM conversations c
+            WHERE c.id = $1
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .fetch_optional(tx)
+        .await?;
+
+        if let Some(row) = row {
+            let is_member: bool = row.get("is_member");
+            let conversation = ConversationEntity::from_row(&row)?;
+            Ok((Some(conversation), is_member))
+        } else {
+            Ok((None, false))
+        }
     }
 }
 

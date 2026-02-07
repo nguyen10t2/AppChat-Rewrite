@@ -33,16 +33,16 @@ pub async fn send_direct_message(
     let message = message_service
         .send_direct_message(
             user_id,
-            body.recipient_id,
+            body.recipient_id.ok_or(error::Error::bad_request("Recipient ID is required"))?,
             body.content.clone(),
-            Some(body.conversation_id),
+            body.conversation_id,
         )
         .await?;
 
     Ok(success::Success::ok(Some(message)).message("Send direct message successfully"))
 }
 
-#[post("/group")]
+#[post("/")]
 pub async fn send_group_message(
     message_service: web::Data<MessageSvc>,
     body: web::Json<SendGroupMessage>,

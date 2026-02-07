@@ -1,13 +1,13 @@
-use deadpool_redis::{Runtime, redis::AsyncCommands};
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use deadpool_redis::{redis::AsyncCommands, Runtime};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 
-use crate::{ENV, api::error};
+use crate::{api::error, ENV};
 
 pub async fn connect_database() -> Result<PgPool, error::SystemError> {
     let database_url = &ENV.database_url;
     let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .min_connections(1)
+        .max_connections(10)
+        .min_connections(5)
         .acquire_slow_threshold(std::time::Duration::from_secs(3))
         .connect(database_url)
         .await?;

@@ -202,4 +202,18 @@ where
 
         Ok(participants)
     }
+
+    pub async fn get_conversation_and_check_membership(
+        &self,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(Option<ConversationEntity>, bool), error::SystemError> {
+        self.conversation_repo
+            .get_conversation_and_check_membership(
+                &conversation_id,
+                &user_id,
+                self.conversation_repo.get_pool(),
+            )
+            .await
+    }
 }

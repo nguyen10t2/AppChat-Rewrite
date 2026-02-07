@@ -23,9 +23,10 @@ pub struct GetMessageResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendDirectMessage {
-    pub conversation_id: Uuid,
-    pub recipient_id: Uuid,
+    pub conversation_id: Option<Uuid>,
+    pub recipient_id: Option<Uuid>,
     pub content: String,
 }
 

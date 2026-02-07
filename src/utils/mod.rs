@@ -98,12 +98,11 @@ where
         req: &actix_web::HttpRequest,
         payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
-        let fut = web::Json::<serde_json::Value>::from_request(req, payload);
+        let fut = web::Json::<T>::from_request(req, payload);
 
         Box::pin(async move {
             let json = fut.await.map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
-            let model: T = serde_json::from_value(json.into_inner())
-                .map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
+            let model = json.into_inner();
             model.validate().map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
             Ok(ValidatedJson(model))
         })

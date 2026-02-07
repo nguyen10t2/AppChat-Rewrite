@@ -15,7 +15,7 @@ use crate::{
     utils::{ValidatedJson, ValidatedQuery},
 };
 
-type ConversationSvc =
+pub type ConversationSvc =
     ConversationService<ConversationPgRepository, ParticipantPgRepository, MessageRepositoryPg>;
 
 #[get("/")]
