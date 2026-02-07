@@ -41,6 +41,17 @@ async fn health_check(_db_pool: web::Data<sqlx::PgPool>) -> &'static str {
     "Server is running"
 }
 
+#[actix_web::get("/chao")]
+async fn chao() -> actix_web::HttpResponse {
+    let greeting = serde_json::json!({
+        "message": "Chào mừng bạn đến với App Chat!",
+        "welcome": "Welcome to App Chat!",
+        "version": "1.0.0",
+        "status": "online"
+    });
+    actix_web::HttpResponse::Ok().json(greeting)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let db_pool =
@@ -84,6 +95,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(conversation_service.clone()))
             .app_data(web::Data::new(message_service.clone()))
             .service(health_check)
+            .service(chao)
             .service(
                 web::scope("/api").configure(modules::user::route::public_api_configure).service(
                     web::scope("")

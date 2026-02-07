@@ -74,14 +74,20 @@ cargo run
 
 Dưới đây là một số endpoints chính:
 
--   `POST /api/public/register`: Đăng ký người dùng mới.
--   `POST /api/public/login`: Đăng nhập.
--   `GET /api/private/users`: Lấy danh sách người dùng.
--   `POST /api/private/friends/request`: Gửi lời mời kết bạn.
--   `POST /api/private/conversations/`: Tạo cuộc trò chuyện mới.
--   `GET /api/private/conversations/{id}/messages`: Lấy tin nhắn trong cuộc trò chuyện.
--   `POST /api/private/messages/direct`: Gửi tin nhắn trực tiếp.
--   `POST /api/private/messages/group`: Gửi tin nhắn nhóm.
+### Public Endpoints (Không yêu cầu xác thực)
+
+-   `GET /chao`: Endpoint chào mừng, trả về thông tin chào mừng bằng tiếng Việt và tiếng Anh.
+-   `POST /api/auth/register`: Đăng ký người dùng mới.
+-   `POST /api/auth/login`: Đăng nhập.
+
+### Private Endpoints (Yêu cầu xác thực)
+
+-   `GET /api/users`: Lấy danh sách người dùng.
+-   `POST /api/friends/request`: Gửi lời mời kết bạn.
+-   `POST /api/conversations/`: Tạo cuộc trò chuyện mới.
+-   `GET /api/conversations/{id}/messages`: Lấy tin nhắn trong cuộc trò chuyện.
+-   `POST /api/messages/direct`: Gửi tin nhắn trực tiếp.
+-   `POST /api/messages/group`: Gửi tin nhắn nhóm.
 
 ## Đóng góp
 
