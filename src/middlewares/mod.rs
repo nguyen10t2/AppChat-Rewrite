@@ -1,5 +1,5 @@
 use actix_web::{
-    body::{to_bytes, MessageBody},
+    body::MessageBody,
     dev::{ServiceRequest, ServiceResponse},
     middleware::Next,
     Error, HttpMessage, HttpRequest,
@@ -86,6 +86,7 @@ where
     }
 }
 
+#[allow(unused)]
 #[derive(Deserialize, Validate)]
 pub struct RequireBody {
     pub recipient_id: Option<Uuid>,
@@ -93,6 +94,7 @@ pub struct RequireBody {
     pub member_ids: Option<Vec<Uuid>>,
 }
 
+#[allow(unused)]
 pub async fn require_friend<B>(
     req: ServiceRequest,
     next: Next<B>,

@@ -39,6 +39,7 @@ where
         ConversationService { conversation_repo, participant_repo, message_repo }
     }
 
+    #[allow(unused)]
     pub async fn get_by_id(
         &self,
         conversation_id: Uuid,
@@ -61,7 +62,7 @@ where
     ) -> Result<Option<ConversationDetail>, error::SystemError> {
         let mut tx = self.conversation_repo.get_pool().begin().await?;
 
-        let participant = member_ids.get(0).ok_or_else(|| {
+        let participant = member_ids.first().ok_or_else(|| {
             error::SystemError::bad_request(
                 "At least one member is required to create a conversation",
             )
@@ -71,13 +72,13 @@ where
             ConversationType::Direct => {
                 if let Some(conv) = self
                     .conversation_repo
-                    .find_direct_between_users(&user_id, &participant, tx.as_mut())
+                    .find_direct_between_users(&user_id, participant, tx.as_mut())
                     .await?
                 {
                     conv
                 } else {
                     self.conversation_repo
-                        .create_direct_conversation(&user_id, &participant, &mut tx)
+                        .create_direct_conversation(&user_id, participant, &mut tx)
                         .await?
                 }
             }
@@ -186,6 +187,7 @@ where
         Ok((messages, next_cursor.map(|c| c.to_rfc3339())))
     }
 
+    #[allow(unused)]
     pub async fn get_participants_by_conversation_id(
         &self,
         conversation_id: Uuid,
@@ -193,7 +195,7 @@ where
         let participants = self
             .participant_repo
             .find_participants_by_conversation_id(
-                &vec![conversation_id],
+                &[conversation_id],
                 self.conversation_repo.get_pool(),
             )
             .await?;

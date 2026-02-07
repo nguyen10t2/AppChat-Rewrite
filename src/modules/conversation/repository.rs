@@ -88,6 +88,7 @@ pub trait ParticipantRepository {
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 
+    #[allow(unused)]
     async fn reset_unread_count<'e, E>(
         &self,
         conversation_id: &Uuid,

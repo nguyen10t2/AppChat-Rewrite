@@ -339,14 +339,8 @@ impl ConversationRepository for ConversationPgRepository {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ParticipantPgRepository {}
-
-impl Default for ParticipantPgRepository {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 #[async_trait::async_trait]
 impl ParticipantRepository for ParticipantPgRepository {
@@ -458,14 +452,8 @@ impl ParticipantRepository for ParticipantPgRepository {
 }
 
 #[allow(unused)]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct LastMessagePgRepository {}
-
-impl Default for LastMessagePgRepository {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 #[async_trait::async_trait]
 impl LastMessageRepository for LastMessagePgRepository {

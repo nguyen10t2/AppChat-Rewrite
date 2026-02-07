@@ -3,10 +3,7 @@ use actix_web::{
     middleware::{from_fn, Logger},
     web, App, HttpServer,
 };
-use std::{
-    arch::x86_64::_SIDD_LEAST_SIGNIFICANT,
-    sync::{Arc, LazyLock},
-};
+use std::sync::{Arc, LazyLock};
 
 use crate::{
     configs::{connect_database, RedisCache},
@@ -22,7 +19,6 @@ use crate::{
         message::{repository_pg::MessageRepositoryPg, service::MessageService},
         user::{repository_pg::UserRepositoryPg, schema::UserRole, service::UserService},
     },
-    test::*,
 };
 
 mod api;
@@ -41,7 +37,7 @@ pub static ENV: LazyLock<constants::Env> = LazyLock::new(|| {
 });
 
 #[actix_web::get("/")]
-async fn health_check(db_pool: web::Data<sqlx::PgPool>) -> &'static str {
+async fn health_check(_db_pool: web::Data<sqlx::PgPool>) -> &'static str {
     "Server is running"
 }
 
