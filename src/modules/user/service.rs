@@ -1,15 +1,15 @@
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::ENV;
 use crate::api::error;
 use crate::configs::RedisCache;
-use crate::modules::CACHE_TTL;
 use crate::modules::user::model::{
     SignInModel, SignUpModel, UpdateUser, UpdateUserModel, UserResponse,
 };
 use crate::modules::user::{model::InsertUser, repository::UserRepository};
-use crate::utils::{Claims, TypeClaims, hash_password, verify_password};
+use crate::modules::CACHE_TTL;
+use crate::utils::{hash_password, verify_password, Claims, TypeClaims};
+use crate::ENV;
 
 #[derive(Clone)]
 pub struct UserService {
