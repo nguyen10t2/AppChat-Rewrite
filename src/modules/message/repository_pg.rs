@@ -18,31 +18,39 @@ impl MessageRepositoryPg {
 
 #[async_trait::async_trait]
 impl MessageRepository for MessageRepositoryPg {
-    async fn create(
+    fn get_pool(&self) -> &sqlx::PgPool {
+        &self.pool
+    }
+
+    async fn create<'e, E>(
         &self,
         message: &InsertMessage,
-    ) -> Result<Option<MessageEntity>, error::SystemError> {
+        tx: E,
+    ) -> Result<MessageEntity, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         let message = sqlx::query_as::<_, MessageEntity>(
-            "INSERT INTO messages (conversation_id, sender_id, reply_to_id, type, content, file_url, is_edited) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
+            "INSERT INTO messages (conversation_id, sender_id, content) VALUES ($1, $2, $3) RETURNING *",
         )
         .bind(message.conversation_id)
         .bind(message.sender_id)
-        .bind(message.reply_to_id)
-        .bind(&message._type)
         .bind(&message.content)
-        .bind(&message.file_url)
-        .bind(message.is_edited)
-        .fetch_optional(&self.pool)
+        .fetch_one(tx)
         .await?;
 
         Ok(message)
     }
 
-    async fn find_by_query(
+    async fn find_by_query<'e, E>(
         &self,
         query: &message::model::MessageQuery,
         limit: i32,
-    ) -> Result<Vec<MessageEntity>, error::SystemError> {
+        tx: E,
+    ) -> Result<Vec<MessageEntity>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
         // has index on (conversation_id, created_at DESC NULLS LAST) where deleted_at IS NULL
 
         let messages = sqlx::query_as::<_, MessageEntity>(
@@ -59,7 +67,7 @@ impl MessageRepository for MessageRepositoryPg {
         .bind(query.conversation_id)
         .bind(query.created_at)
         .bind(limit + 1)
-        .fetch_all(&self.pool)
+        .fetch_all(tx)
         .await?;
 
         Ok(messages)

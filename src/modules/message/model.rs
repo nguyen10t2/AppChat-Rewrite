@@ -7,11 +7,7 @@ use uuid::Uuid;
 pub struct InsertMessage {
     pub conversation_id: Uuid,
     pub sender_id: Uuid,
-    pub reply_to_id: Option<Uuid>,
-    pub _type: Option<MessageType>,
     pub content: Option<String>,
-    pub file_url: Option<String>,
-    pub is_edited: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -24,4 +20,16 @@ pub struct MessageQuery {
 pub struct GetMessageResponse {
     pub messages: Vec<MessageEntity>,
     pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SendDirectMessage {
+    pub conversation_id: Uuid,
+    pub recipient_id: Uuid,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SendGroupMessage {
+    pub content: String,
 }

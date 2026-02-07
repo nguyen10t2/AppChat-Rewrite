@@ -22,9 +22,11 @@ pub mod friend {
 
 #[allow(unused)]
 pub mod message {
+    pub mod handle;
     pub mod model;
     pub mod repository;
     pub mod repository_pg;
+    pub mod route;
     pub mod schema;
     pub mod service;
 }

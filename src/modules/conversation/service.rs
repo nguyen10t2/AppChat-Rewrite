@@ -169,7 +169,11 @@ where
 
         let mut messages = self
             .message_repo
-            .find_by_query(&MessageQuery { conversation_id, created_at }, limit)
+            .find_by_query(
+                &MessageQuery { conversation_id, created_at },
+                limit,
+                self.message_repo.get_pool(),
+            )
             .await?;
 
         let next_cursor = if messages.len() > limit as usize {

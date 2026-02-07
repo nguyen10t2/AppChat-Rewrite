@@ -480,8 +480,8 @@ impl LastMessageRepository for LastMessagePgRepository {
         let id = Uuid::now_v7();
         let res = sqlx::query_as::<_, LastMessageEntity>(
             r#"
-            INSERT INTO last_messages (id, content, conversation_id, sender_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO last_messages (id, content, conversation_id, sender_id, created_at)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (conversation_id) DO UPDATE
             SET content = EXCLUDED.content,
                 sender_id = EXCLUDED.sender_id,
@@ -493,6 +493,7 @@ impl LastMessageRepository for LastMessagePgRepository {
         .bind(&last_message.content)
         .bind(last_message.conversation_id)
         .bind(last_message.sender_id)
+        .bind(last_message.created_at)
         .fetch_one(tx)
         .await?;
 

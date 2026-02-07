@@ -70,6 +70,7 @@ pub struct ConversationDetail {
 
 #[derive(Debug, Clone, FromRow, Deserialize, Serialize, Validate)]
 pub struct NewConversation {
+    #[serde(rename = "type")]
     pub _type: ConversationType,
     pub name: String,
     #[validate(length(min = 1))]
@@ -100,6 +101,7 @@ pub struct NewLastMessage {
     pub conversation_id: Uuid,
     pub sender_id: Uuid,
     pub content: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
