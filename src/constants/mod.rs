@@ -4,6 +4,7 @@ pub struct Env {
     pub refresh_token_expiration: u64,
     pub database_url: String,
     pub redis_url: String,
+    pub frontend_url: String,
     pub ip: String,
     pub port: u16,
 }
@@ -27,6 +28,8 @@ impl Env {
         let redis_url = std::env::var("REDIS_URL")
             .expect("REDIS_URL must be set in .env file or environment variable");
 
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".to_string());
         let ip = std::env::var("IP").unwrap_or_else(|_| "127.0.0.1".to_string());
         let port = std::env::var("PORT")
             .unwrap_or_else(|_| "8080".to_string())
@@ -38,6 +41,7 @@ impl Env {
             refresh_token_expiration,
             database_url,
             redis_url,
+            frontend_url,
             ip,
             port,
         }

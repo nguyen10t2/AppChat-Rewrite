@@ -18,7 +18,7 @@ use crate::{
 pub type ConversationSvc =
     ConversationService<ConversationPgRepository, ParticipantPgRepository, MessageRepositoryPg>;
 
-#[get("/")]
+#[get("")]
 pub async fn get_conversations(
     conversation_svc: web::Data<ConversationSvc>,
     req: HttpRequest,
@@ -42,7 +42,7 @@ pub async fn get_messages(
         .message("Successfully retrieved messages"))
 }
 
-#[post("/")]
+#[post("")]
 pub async fn create_conversation(
     conversation_svc: web::Data<ConversationSvc>,
     ValidatedJson(body): ValidatedJson<NewConversation>,

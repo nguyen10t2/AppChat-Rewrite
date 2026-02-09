@@ -1,8 +1,14 @@
 #![allow(unused)]
-use actix_web::{body, http::StatusCode, HttpResponse, ResponseError};
+use actix_web::{
+    body,
+    http::{header, StatusCode},
+    HttpResponse, ResponseError,
+};
 use deadpool_redis::{redis::RedisError, CreatePoolError, PoolError};
 use serde_json::json;
 use std::borrow::Cow;
+
+use crate::ENV;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -64,18 +70,23 @@ impl ResponseError for Error {
     }
 
     fn error_response(&self) -> HttpResponse {
+        let header = ("Access-Control-Allow-Origin", ENV.frontend_url.as_str());
+        let mut res = HttpResponse::build(self.status_code());
+
+        res.insert_header(header);
+        res.insert_header(("Access-Control-Allow-Credentials", "true"));
+
         match self {
             // Has Message
             Error::NotFound(msg)
             | Error::Conflict(msg)
             | Error::Unauthorized(msg)
             | Error::BadRequest(msg)
-            | Error::Forbidden(msg) => {
-                HttpResponse::build(self.status_code()).json(ErrorBody { message: msg.clone() })
-            }
+            | Error::Forbidden(msg) => res.json(ErrorBody { message: msg.clone() }),
             // No Message
-            Error::InternalServer => HttpResponse::build(self.status_code())
-                .json(ErrorBody { message: "Internal Server Error".into() }),
+            Error::InternalServer => {
+                res.json(ErrorBody { message: "Internal Server Error".into() })
+            }
         }
     }
 }

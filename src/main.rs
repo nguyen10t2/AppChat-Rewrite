@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_web::{
     self,
     middleware::{from_fn, Logger},
@@ -76,7 +77,10 @@ async fn main() -> std::io::Result<()> {
 
     println!("Starting server at http://{}:{}", ENV.ip.as_str(), ENV.port);
     HttpServer::new(move || {
+        let cors = Cors::permissive();
+
         App::new()
+            .wrap(cors)
             .wrap(Logger::default())
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(friend_service.clone()))
@@ -85,15 +89,22 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(message_service.clone()))
             .service(health_check)
             .service(
-                web::scope("/api").configure(modules::user::route::public_api_configure).service(
-                    web::scope("")
-                        .wrap(from_fn(authorization(vec![UserRole::User])))
-                        .wrap(from_fn(authentication))
-                        .configure(modules::user::route::configure)
-                        .configure(modules::friend::route::configure)
-                        .configure(modules::conversation::route::configure)
-                        .configure(modules::message::route::configure),
-                ),
+                web::scope("/api")
+                    .default_service(
+                        web::route()
+                            .guard(actix_web::guard::Method(actix_web::http::Method::OPTIONS))
+                            .to(|| async { actix_web::HttpResponse::Ok().finish() }),
+                    )
+                    .configure(modules::user::route::public_api_configure)
+                    .service(
+                        web::scope("")
+                            .wrap(from_fn(authorization(vec![UserRole::User])))
+                            .wrap(from_fn(authentication))
+                            .configure(modules::user::route::configure)
+                            .configure(modules::friend::route::configure)
+                            .configure(modules::conversation::route::configure)
+                            .configure(modules::message::route::configure),
+                    ),
             )
     })
     .bind((ENV.ip.as_str(), ENV.port))?

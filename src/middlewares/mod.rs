@@ -13,9 +13,7 @@ use validator::Validate;
 use crate::{
     api::error,
     modules::{
-        conversation::handle::ConversationSvc,
-        friend::{repository_pg::FriendRepositoryPg, service::FriendService},
-        user::{repository_pg::UserRepositoryPg, schema::UserRole},
+        conversation::handle::ConversationSvc, friend::handle::FriendSvc, user::schema::UserRole,
     },
     utils::Claims,
     ENV,
@@ -28,6 +26,10 @@ pub async fn authentication<B>(
 where
     B: MessageBody + 'static,
 {
+    if req.method() == actix_web::http::Method::OPTIONS {
+        return next.call(req).await;
+    }
+
     let auth = req.headers().get("Authorization").and_then(|h| h.to_str().ok());
     let token = match auth.and_then(|h| h.strip_prefix("Bearer ")) {
         Some(t) => t,
@@ -112,9 +114,7 @@ pub async fn require_friend(
 
     let user_id = get_extensions::<Claims>(req.request())?.sub;
 
-    let friend_svc = req
-        .app_data::<web::Data<FriendService<FriendRepositoryPg, UserRepositoryPg>>>()
-        .ok_or(error::Error::InternalServer)?;
+    let friend_svc = req.app_data::<web::Data<FriendSvc>>().ok_or(error::Error::InternalServer)?;
 
     if let Some(recipient_id) = parsed.recipient_id {
         let (user_a, user_b) =

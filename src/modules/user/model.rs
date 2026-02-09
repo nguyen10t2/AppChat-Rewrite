@@ -89,11 +89,13 @@ pub struct SignUpResponse {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SignInResponse {
     pub access_token: String,
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UserResponse {
     pub id: uuid::Uuid,
     pub username: String,
