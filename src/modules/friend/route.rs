@@ -1,5 +1,5 @@
 use crate::modules::friend::handle::*;
-use actix_web::web::{ServiceConfig, scope};
+use actix_web::web::{scope, ServiceConfig};
 
 pub fn configure(cfg: &mut ServiceConfig) {
     cfg.service(

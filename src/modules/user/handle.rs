@@ -1,31 +1,35 @@
 use actix_web::{
-    HttpRequest,
-    cookie::{Cookie, time},
-    delete, get, patch, post, web,
+    cookie::{time, Cookie},
+    delete, get, patch, post, web, HttpRequest,
 };
 use uuid::Uuid;
 
-use crate::modules::user::model::SignUpResponse;
 use crate::modules::user::{model, service::UserService};
-use crate::{ENV, middlewares::get_claims};
 use crate::{
     api::{error, success},
     utils::ValidatedJson,
 };
+use crate::{middlewares::get_extensions, ENV};
+use crate::{
+    modules::user::{model::SignUpResponse, repository_pg::UserRepositoryPg},
+    utils::Claims,
+};
+
+pub type UserSvc = UserService<UserRepositoryPg>;
 
 #[get("/profile")]
 pub async fn get_profile(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<model::UserResponse>, error::Error> {
-    let id = get_claims(&req)?.sub;
+    let id = get_extensions::<Claims>(&req)?.sub;
     let user = user_service.get_by_id(id).await?;
     Ok(success::Success::ok(Some(user)).message("Profile retrieved successfully"))
 }
 
 #[get("/{id:[0-9a-fA-F-]{36}}")]
 pub async fn get_user(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     user_id: web::Path<Uuid>,
 ) -> Result<success::Success<model::UserResponse>, error::Error> {
     let user = user_service.get_by_id(user_id.into_inner()).await?;
@@ -34,17 +38,17 @@ pub async fn get_user(
 
 #[patch("/{id:[0-9a-fA-F-]{36}}")]
 pub async fn update_user(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     user_id: web::Path<Uuid>,
-    user_data: ValidatedJson<model::UpdateUserModel>,
+    ValidatedJson(user_data): ValidatedJson<model::UpdateUserModel>,
 ) -> Result<success::Success<()>, error::Error> {
-    user_service.update(user_id.into_inner(), user_data.0).await?;
+    user_service.update(user_id.into_inner(), user_data).await?;
     Ok(success::Success::ok(None).message("User updated successfully"))
 }
 
 #[delete("/{id:[0-9a-fA-F-]{36}}")]
 pub async fn delete_user(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     user_id: web::Path<Uuid>,
 ) -> Result<success::Success<()>, error::Error> {
     user_service.delete(user_id.into_inner()).await?;
@@ -53,19 +57,19 @@ pub async fn delete_user(
 
 #[post("/signup")]
 pub async fn sign_up(
-    user_service: web::Data<UserService>,
-    user_data: ValidatedJson<model::SignUpModel>,
+    user_service: web::Data<UserSvc>,
+    ValidatedJson(user_data): ValidatedJson<model::SignUpModel>,
 ) -> Result<success::Success<SignUpResponse>, error::Error> {
-    let user_id = user_service.sign_up(user_data.0).await?;
+    let user_id = user_service.sign_up(user_data).await?;
     Ok(success::Success::created(Some(SignUpResponse { id: user_id })).message("Signup successful"))
 }
 
 #[post("/signin")]
 pub async fn sign_in(
-    user_service: web::Data<UserService>,
-    user_data: ValidatedJson<model::SignInModel>,
+    user_service: web::Data<UserSvc>,
+    ValidatedJson(user_data): ValidatedJson<model::SignInModel>,
 ) -> Result<success::Success<model::SignInResponse>, error::Error> {
-    let (access_token, refresh_token) = user_service.sign_in(user_data.0).await?;
+    let (access_token, refresh_token) = user_service.sign_in(user_data).await?;
     let response = model::SignInResponse { access_token };
     let refresh_cookie = Cookie::build("refresh_token", refresh_token)
         .path("/")
@@ -80,7 +84,7 @@ pub async fn sign_in(
 
 #[get("/signout")]
 pub async fn sign_out(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {
     let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());
@@ -97,7 +101,7 @@ pub async fn sign_out(
 
 #[post("/refresh")]
 pub async fn refresh(
-    user_service: web::Data<UserService>,
+    user_service: web::Data<UserSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<model::SignInResponse>, error::Error> {
     let refresh_token = req.cookie("refresh_token").map(|c| c.value().to_string());

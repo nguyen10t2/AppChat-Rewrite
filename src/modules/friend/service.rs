@@ -15,22 +15,21 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct FriendService<R>
+pub struct FriendService<R, U>
 where
-    R: FriendRepo + Send + Sync + 'static,
+    R: FriendRepo + Send + Sync,
+    U: UserRepository + Send + Sync,
 {
     friend_repo: Arc<R>,
-    user_repo: Arc<dyn UserRepository + Send + Sync>,
+    user_repo: Arc<U>,
 }
 
-impl<R> FriendService<R>
+impl<R, U> FriendService<R, U>
 where
-    R: FriendRepo + Send + Sync + 'static,
+    R: FriendRepo + Send + Sync,
+    U: UserRepository + Send + Sync,
 {
-    pub fn with_dependencies(
-        friend_repo: Arc<R>,
-        user_repo: Arc<dyn UserRepository + Send + Sync>,
-    ) -> Self {
+    pub fn with_dependencies(friend_repo: Arc<R>, user_repo: Arc<U>) -> Self {
         FriendService { friend_repo, user_repo }
     }
 

@@ -3,16 +3,20 @@ use uuid::Uuid;
 
 use crate::{
     api::{error, success},
-    middlewares::get_claims,
-    modules::friend::{
-        model::{FriendRequestBody, FriendRequestResponse, FriendResponse},
-        repository_pg::FriendRepositoryPg,
-        schema::FriendRequestEntity,
-        service::FriendService,
+    middlewares::get_extensions,
+    modules::{
+        friend::{
+            model::{FriendRequestBody, FriendRequestResponse, FriendResponse},
+            repository_pg::FriendRepositoryPg,
+            schema::FriendRequestEntity,
+            service::FriendService,
+        },
+        user::repository_pg::UserRepositoryPg,
     },
+    utils::Claims,
 };
 
-pub type FriendSvc = FriendService<FriendRepositoryPg>;
+pub type FriendSvc = FriendService<FriendRepositoryPg, UserRepositoryPg>;
 
 #[post("/requests")]
 pub async fn send_friend_request(
@@ -20,7 +24,7 @@ pub async fn send_friend_request(
     body: web::Json<FriendRequestBody>,
     req: HttpRequest,
 ) -> Result<success::Success<FriendRequestEntity>, error::Error> {
-    let sender_id = get_claims(&req)?.sub;
+    let sender_id = get_extensions::<Claims>(&req)?.sub;
     let request = friend_service
         .send_friend_request(sender_id, body.recipient_id, body.message.clone())
         .await?;
@@ -34,7 +38,7 @@ pub async fn accept_friend_request(
     request_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<FriendResponse>, error::Error> {
-    let receiver_id = get_claims(&req)?.sub;
+    let receiver_id = get_extensions::<Claims>(&req)?.sub;
     let response = friend_service.accept_friend_request(receiver_id, *request_id).await?;
 
     Ok(success::Success::ok(Some(response)).message("Friend request accepted successfully"))
@@ -46,7 +50,7 @@ pub async fn decline_friend_request(
     request_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {
-    let receiver_id = get_claims(&req)?.sub;
+    let receiver_id = get_extensions::<Claims>(&req)?.sub;
     friend_service.decline_friend_request(receiver_id, *request_id).await?;
     Ok(success::Success::no_content())
 }
@@ -56,7 +60,7 @@ pub async fn list_friends(
     friend_service: web::Data<FriendSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<Vec<FriendResponse>>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
     let friends = friend_service.get_friends(user_id).await?;
 
     Ok(success::Success::ok(Some(friends)).message("Friends retrieved successfully"))
@@ -67,7 +71,7 @@ pub async fn list_friend_requests(
     friend_service: web::Data<FriendSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<Vec<FriendRequestResponse>>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
     let requests = friend_service.get_friend_requests(user_id).await?;
 
     Ok(success::Success::ok(Some(requests)).message("Friend requests retrieved successfully"))
@@ -79,7 +83,7 @@ pub async fn remove_friend(
     friend_id: web::Path<Uuid>,
     req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
     friend_service.remove_friend(user_id, *friend_id).await?;
     Ok(success::Success::no_content())
 }

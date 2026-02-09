@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 use crate::{
     api::{error, success},
-    middlewares::get_claims,
+    middlewares::get_extensions,
     modules::{
         conversation::{
             model::{ConversationDetail, MessageQueryRequest, NewConversation},
@@ -12,7 +12,7 @@ use crate::{
         },
         message::{model::GetMessageResponse, repository_pg::MessageRepositoryPg},
     },
-    utils::{ValidatedJson, ValidatedQuery},
+    utils::{Claims, ValidatedJson, ValidatedQuery},
 };
 
 pub type ConversationSvc =
@@ -23,7 +23,7 @@ pub async fn get_conversations(
     conversation_svc: web::Data<ConversationSvc>,
     req: HttpRequest,
 ) -> Result<success::Success<Vec<ConversationDetail>>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
 
     let conversations = conversation_svc.get_by_user_id(user_id).await?;
 
@@ -34,9 +34,8 @@ pub async fn get_conversations(
 pub async fn get_messages(
     conversation_svc: web::Data<ConversationSvc>,
     conversation_id: web::Path<Uuid>,
-    query: ValidatedQuery<MessageQueryRequest>,
+    ValidatedQuery(query): ValidatedQuery<MessageQueryRequest>,
 ) -> Result<success::Success<GetMessageResponse>, error::Error> {
-    let query = query.0;
     let (messages, cursor) =
         conversation_svc.get_message(*conversation_id, query.limit, query.cursor.clone()).await?;
     Ok(success::Success::ok(Some(GetMessageResponse { messages, cursor }))
@@ -46,12 +45,10 @@ pub async fn get_messages(
 #[post("/")]
 pub async fn create_conversation(
     conversation_svc: web::Data<ConversationSvc>,
-    body: ValidatedJson<NewConversation>,
+    ValidatedJson(body): ValidatedJson<NewConversation>,
     req: HttpRequest,
 ) -> Result<success::Success<Option<ConversationDetail>>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
-
-    let body = body.0;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
 
     let conversation = conversation_svc
         .create_conversation(body._type, body.name, body.member_ids, user_id)

@@ -16,10 +16,10 @@ use crate::modules::message::schema::{MessageEntity, MessageType};
 #[derive(Clone)]
 pub struct MessageService<M, C, P, L>
 where
-    M: MessageRepository + Send + Sync + 'static,
-    C: ConversationRepository + Send + Sync + 'static,
-    P: ParticipantRepository + Send + Sync + 'static,
-    L: LastMessageRepository + Send + Sync + 'static,
+    M: MessageRepository + Send + Sync,
+    C: ConversationRepository + Send + Sync,
+    P: ParticipantRepository + Send + Sync,
+    L: LastMessageRepository + Send + Sync,
 {
     message_repo: Arc<M>,
     conversation_repo: Arc<C>,
@@ -30,10 +30,10 @@ where
 
 impl<M, C, P, L> MessageService<M, C, P, L>
 where
-    C: ConversationRepository + Send + Sync + 'static,
-    M: MessageRepository + Send + Sync + 'static,
-    P: ParticipantRepository + Send + Sync + 'static,
-    L: LastMessageRepository + Send + Sync + 'static,
+    C: ConversationRepository + Send + Sync,
+    M: MessageRepository + Send + Sync,
+    P: ParticipantRepository + Send + Sync,
+    L: LastMessageRepository + Send + Sync,
 {
     pub fn with_dependencies(
         conversation_repo: Arc<C>,

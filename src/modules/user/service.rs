@@ -1,27 +1,30 @@
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::ENV;
 use crate::api::error;
 use crate::configs::RedisCache;
-use crate::modules::CACHE_TTL;
 use crate::modules::user::model::{
     SignInModel, SignUpModel, UpdateUser, UpdateUserModel, UserResponse,
 };
 use crate::modules::user::{model::InsertUser, repository::UserRepository};
-use crate::utils::{Claims, TypeClaims, hash_password, verify_password};
+use crate::modules::CACHE_TTL;
+use crate::utils::{hash_password, verify_password, Claims, TypeClaims};
+use crate::ENV;
 
 #[derive(Clone)]
-pub struct UserService {
-    repo: Arc<dyn UserRepository + Send + Sync>,
+pub struct UserService<U>
+where
+    U: UserRepository + Send + Sync,
+{
+    repo: Arc<U>,
     cache: Arc<RedisCache>,
 }
 
-impl UserService {
-    pub fn with_dependencies(
-        repo: Arc<dyn UserRepository + Send + Sync>,
-        cache: Arc<RedisCache>,
-    ) -> Self {
+impl<U> UserService<U>
+where
+    U: UserRepository + Send + Sync,
+{
+    pub fn with_dependencies(repo: Arc<U>, cache: Arc<RedisCache>) -> Self {
         UserService { repo, cache }
     }
 

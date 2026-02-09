@@ -2,10 +2,13 @@ use actix_web::{post, web, HttpRequest};
 
 use crate::{
     api::{error, success},
-    middlewares::{get_claims, get_conversation},
+    middlewares::get_extensions,
     modules::{
-        conversation::repository_pg::{
-            ConversationPgRepository, LastMessagePgRepository, ParticipantPgRepository,
+        conversation::{
+            repository_pg::{
+                ConversationPgRepository, LastMessagePgRepository, ParticipantPgRepository,
+            },
+            schema::ConversationEntity,
         },
         message::{
             model::{SendDirectMessage, SendGroupMessage},
@@ -14,6 +17,7 @@ use crate::{
             service::MessageService,
         },
     },
+    utils::Claims,
 };
 
 type MessageSvc = MessageService<
@@ -29,7 +33,7 @@ pub async fn send_direct_message(
     body: web::Json<SendDirectMessage>,
     req: HttpRequest,
 ) -> Result<success::Success<MessageEntity>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
     let message = message_service
         .send_direct_message(
             user_id,
@@ -48,8 +52,8 @@ pub async fn send_group_message(
     body: web::Json<SendGroupMessage>,
     req: HttpRequest,
 ) -> Result<success::Success<MessageEntity>, error::Error> {
-    let user_id = get_claims(&req)?.sub;
-    let conversation = get_conversation(&req)?;
+    let user_id = get_extensions::<Claims>(&req)?.sub;
+    let conversation = get_extensions::<ConversationEntity>(&req)?;
     let message =
         message_service.send_group_message(user_id, body.content.clone(), conversation.id).await?;
 

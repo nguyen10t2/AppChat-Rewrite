@@ -3,13 +3,17 @@ use actix_web::{
     web::{scope, ServiceConfig},
 };
 
-use crate::{middlewares::require_friend, modules::message::handle::*};
+use crate::{
+    middlewares::{require_friend, require_group_member},
+    modules::message::handle::*,
+};
 
 pub fn configure(cfg: &mut ServiceConfig) {
     cfg.service(
         scope("/messages")
-            .wrap(from_fn(require_friend))
-            .service(scope("/direct").service(send_direct_message))
-            .service(scope("/group").service(send_group_message)),
+            .service(scope("/direct").wrap(from_fn(require_friend)).service(send_direct_message))
+            .service(
+                scope("/group").wrap(from_fn(require_group_member)).service(send_group_message),
+            ),
     );
 }

@@ -16,9 +16,9 @@ use crate::{
 #[derive(Clone)]
 pub struct ConversationService<R, P, L>
 where
-    R: ConversationRepository + Send + Sync + 'static,
-    P: ParticipantRepository + Send + Sync + 'static,
-    L: MessageRepository + Send + Sync + 'static,
+    R: ConversationRepository + Send + Sync,
+    P: ParticipantRepository + Send + Sync,
+    L: MessageRepository + Send + Sync,
 {
     conversation_repo: Arc<R>,
     participant_repo: Arc<P>,
@@ -27,9 +27,9 @@ where
 
 impl<R, P, L> ConversationService<R, P, L>
 where
-    R: ConversationRepository + Send + Sync + 'static,
-    P: ParticipantRepository + Send + Sync + 'static,
-    L: MessageRepository + Send + Sync + 'static,
+    R: ConversationRepository + Send + Sync,
+    P: ParticipantRepository + Send + Sync,
+    L: MessageRepository + Send + Sync,
 {
     pub fn with_dependencies(
         conversation_repo: Arc<R>,

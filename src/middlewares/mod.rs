@@ -13,9 +13,9 @@ use validator::Validate;
 use crate::{
     api::error,
     modules::{
-        conversation::{handle::ConversationSvc, schema::ConversationEntity},
+        conversation::handle::ConversationSvc,
         friend::{repository_pg::FriendRepositoryPg, service::FriendService},
-        user::schema::UserRole,
+        user::{repository_pg::UserRepositoryPg, schema::UserRole},
     },
     utils::Claims,
     ENV,
@@ -44,26 +44,13 @@ where
     next.call(req).await
 }
 
-pub fn get_claims(req: &HttpRequest) -> Result<Claims, error::Error> {
+pub fn get_extensions<T: Clone + 'static>(req: &HttpRequest) -> Result<T, error::Error> {
     let extensions = req.extensions();
 
-    let claims = extensions
-        .get::<Claims>()
-        .ok_or_else(|| error::Error::unauthorized("Unauthorized"))?
-        .clone();
+    let claims =
+        extensions.get::<T>().ok_or_else(|| error::Error::unauthorized("Unauthorized"))?.clone();
 
     Ok(claims)
-}
-
-pub fn get_conversation(req: &HttpRequest) -> Result<ConversationEntity, error::Error> {
-    let extensions = req.extensions();
-
-    let conversation = extensions
-        .get::<ConversationEntity>()
-        .ok_or_else(|| error::Error::unauthorized("Unauthorized"))?
-        .clone();
-
-    Ok(conversation)
 }
 
 pub fn authorization<B>(
@@ -79,7 +66,7 @@ where
     move |req: ServiceRequest, next: Next<B>| {
         let roles = allowd_roles.clone();
         async move {
-            let role = get_claims(req.request())?.role;
+            let role = get_extensions::<Claims>(req.request())?.role;
 
             if !roles.contains(&role) {
                 return Err(error::Error::forbidden("No permission").into());
@@ -123,11 +110,11 @@ pub async fn require_friend(
 
     parsed.validate().map_err(|e| error::Error::BadRequest(e.to_string().into()))?;
 
-    let user_id = get_claims(req.request())?.sub;
+    let user_id = get_extensions::<Claims>(req.request())?.sub;
 
     let friend_svc = req
-        .app_data::<web::Data<FriendService<FriendRepositoryPg>>>()
-        .ok_or_else(|| error::Error::InternalServer)?;
+        .app_data::<web::Data<FriendService<FriendRepositoryPg, UserRepositoryPg>>>()
+        .ok_or(error::Error::InternalServer)?;
 
     if let Some(recipient_id) = parsed.recipient_id {
         let (user_a, user_b) =
@@ -180,10 +167,10 @@ pub async fn require_group_member(
     let parsed = serde_json::from_slice::<RequireGroupMemberParams>(&body_bytes)
         .map_err(|_| error::Error::bad_request("Invalid Body"))?;
 
-    let user_id = get_claims(&req.request())?.sub;
+    let user_id = get_extensions::<Claims>(req.request())?.sub;
 
     let conv_svc =
-        req.app_data::<web::Data<ConversationSvc>>().ok_or_else(|| error::Error::InternalServer)?;
+        req.app_data::<web::Data<ConversationSvc>>().ok_or(error::Error::InternalServer)?;
 
     let (conversation, is_member) = conv_svc
         .get_conversation_and_check_membership(parsed.conversation_id, user_id)
