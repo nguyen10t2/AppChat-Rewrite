@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::modules::user::{model, service::UserService};
 use crate::{
     api::{error, success},
-    utils::ValidatedJson,
+    utils::{ValidatedJson, ValidatedQuery},
 };
 use crate::{middlewares::get_extensions, ENV};
 use crate::{
@@ -115,4 +115,13 @@ pub async fn refresh(
     Ok(success::Success::ok(Some(response))
         .message("Refresh successful")
         .cookies(vec![refresh_cookie]))
+}
+
+#[get("/search")]
+pub async fn search_users(
+    user_service: web::Data<UserSvc>,
+    ValidatedQuery(query): ValidatedQuery<model::UserSearchQuery>,
+) -> Result<success::Success<Vec<model::UserResponse>>, error::Error> {
+    let users = user_service.search_users(&query.q, query.limit.unwrap_or(10)).await?;
+    Ok(success::Success::ok(Some(users)).message("Users found successfully"))
 }

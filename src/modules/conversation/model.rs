@@ -57,6 +57,7 @@ pub struct ConversationRow {
 }
 
 #[derive(Debug, Clone, FromRow, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationDetail {
     pub conversation_id: Uuid,
     #[sqlx(rename = "type")]

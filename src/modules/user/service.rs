@@ -197,4 +197,31 @@ where
 
         Ok((new_access_token, new_refresh_token))
     }
+
+    /// Search users by username or display name
+    pub async fn search_users(
+        &self,
+        query: &str,
+        limit: i32,
+    ) -> Result<Vec<UserResponse>, error::SystemError> {
+        // Validate query length
+        if query.trim().is_empty() {
+            return Err(error::SystemError::bad_request("Search query cannot be empty"));
+        }
+
+        if query.len() < 2 {
+            return Err(error::SystemError::bad_request(
+                "Search query must be at least 2 characters",
+            ));
+        }
+
+        // Validate limit
+        let limit = limit.clamp(1, 50); // Limit between 1 and 50
+
+        let users = self.repo.search_users(query, limit).await?;
+
+        let responses: Vec<UserResponse> = users.into_iter().map(UserResponse::from).collect();
+
+        Ok(responses)
+    }
 }

@@ -1,4 +1,5 @@
 #![allow(unused)]
+use actix::Addr;
 use jsonwebtoken::signature::digest::crypto_common::ParBlocks;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -12,6 +13,9 @@ use crate::modules::conversation::repository::{
 use crate::modules::message::model::InsertMessage;
 use crate::modules::message::repository::MessageRepository;
 use crate::modules::message::schema::{MessageEntity, MessageType};
+use crate::modules::websocket::events::BroadcastToRoom;
+use crate::modules::websocket::message::ServerMessage;
+use crate::modules::websocket::server::WebSocketServer;
 
 #[derive(Clone)]
 pub struct MessageService<M, C, P, L>
@@ -26,6 +30,7 @@ where
     participant_repo: Arc<P>,
     last_message_repo: Arc<L>,
     cache: Arc<RedisCache>,
+    ws_server: Arc<Addr<WebSocketServer>>,
 }
 
 impl<M, C, P, L> MessageService<M, C, P, L>
@@ -41,6 +46,7 @@ where
         participant_repo: Arc<P>,
         last_message_repo: Arc<L>,
         cache: Arc<RedisCache>,
+        ws_server: Arc<Addr<WebSocketServer>>,
     ) -> Self {
         MessageService {
             conversation_repo,
@@ -48,6 +54,7 @@ where
             participant_repo,
             last_message_repo,
             cache,
+            ws_server,
         }
     }
 
@@ -105,7 +112,24 @@ where
             )
             .await?;
 
+        // BUG-003 FIX: Update conversation timestamp when new message is sent
+        self.conversation_repo.update_timestamp(&conversation.id, tx.as_mut()).await?;
+
         tx.commit().await?;
+
+        // Broadcast new message to conversation room
+        let message_json = serde_json::to_value(&message).map_err(|e| {
+            error::SystemError::internal_error(format!("Failed to serialize message: {}", e))
+        })?;
+
+        self.ws_server.do_send(BroadcastToRoom {
+            conversation_id: conversation.id,
+            message: ServerMessage::NewMessage {
+                conversation_id: conversation.id,
+                message: message_json,
+            },
+            skip_user_id: Some(sender_id), // Sender không cần nhận lại
+        });
 
         Ok(message)
     }
@@ -126,8 +150,9 @@ where
             )
             .await?;
 
+        // BUG-001 FIX: Increment unread count for all participants EXCEPT the sender
         self.participant_repo
-            .increment_unread_count(&conversation_id, &sender_id, tx.as_mut())
+            .increment_unread_count_for_others(&conversation_id, &sender_id, tx.as_mut())
             .await?;
 
         self.last_message_repo
@@ -142,6 +167,108 @@ where
             )
             .await?;
 
+        // BUG-003 FIX: Update conversation timestamp when new message is sent
+        self.conversation_repo.update_timestamp(&conversation_id, tx.as_mut()).await?;
+
+        tx.commit().await?;
+
+        // Broadcast new message to conversation room
+        let message_json = serde_json::to_value(&message).map_err(|e| {
+            error::SystemError::internal_error(format!("Failed to serialize message: {}", e))
+        })?;
+
+        self.ws_server.do_send(BroadcastToRoom {
+            conversation_id,
+            message: ServerMessage::NewMessage { conversation_id, message: message_json },
+            skip_user_id: Some(sender_id), // Sender không cần nhận lại
+        });
+
         Ok(message)
+    }
+
+    /// Delete a message by ID (soft delete)
+    pub async fn delete_message(
+        &self,
+        message_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), error::SystemError> {
+        let mut tx = self.conversation_repo.get_pool().begin().await?;
+
+        // Get message to verify ownership and get conversation_id
+        let message = self
+            .message_repo
+            .find_by_id(&message_id, tx.as_mut())
+            .await?
+            .ok_or_else(|| error::SystemError::not_found("Message not found"))?;
+
+        // Verify user is the sender
+        if message.sender_id != user_id {
+            return Err(error::SystemError::forbidden("You can only delete your own messages"));
+        }
+
+        // Delete the message
+        let deleted = self.message_repo.delete_message(&message_id, &user_id, tx.as_mut()).await?;
+
+        if !deleted {
+            return Err(error::SystemError::not_found("Message not found or already deleted"));
+        }
+
+        tx.commit().await?;
+
+        // Broadcast message deletion to conversation room
+        self.ws_server.do_send(BroadcastToRoom {
+            conversation_id: message.conversation_id,
+            message: ServerMessage::MessageDeleted {
+                conversation_id: message.conversation_id,
+                message_id,
+            },
+            skip_user_id: None, // Broadcast to all including sender
+        });
+
+        Ok(())
+    }
+
+    /// Edit a message by ID (only content can be edited)
+    pub async fn edit_message(
+        &self,
+        message_id: Uuid,
+        user_id: Uuid,
+        new_content: String,
+    ) -> Result<MessageEntity, error::SystemError> {
+        let mut tx = self.conversation_repo.get_pool().begin().await?;
+
+        // Get message to verify ownership and get conversation_id
+        let message = self
+            .message_repo
+            .find_by_id(&message_id, tx.as_mut())
+            .await?
+            .ok_or_else(|| error::SystemError::not_found("Message not found"))?;
+
+        // Verify user is the sender
+        if message.sender_id != user_id {
+            return Err(error::SystemError::forbidden("You can only edit your own messages"));
+        }
+
+        // Edit the message
+        let edited_message = self
+            .message_repo
+            .edit_message(&message_id, &user_id, &new_content, tx.as_mut())
+            .await?
+            .ok_or_else(|| error::SystemError::not_found("Message not found"))?;
+
+        tx.commit().await?;
+
+        // Broadcast message edit to conversation room
+        self.ws_server.do_send(BroadcastToRoom {
+            conversation_id: message.conversation_id,
+            message: ServerMessage::MessageEdited {
+                conversation_id: message.conversation_id,
+                message_id,
+                new_content,
+            },
+            skip_user_id: None, // Broadcast to all including sender
+        });
+
+        Ok(edited_message)
     }
 }

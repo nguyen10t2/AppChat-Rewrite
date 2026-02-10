@@ -382,6 +382,28 @@ impl ConversationRepository for ConversationPgRepository {
             Ok((None, false))
         }
     }
+
+    async fn update_timestamp<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query(
+            r#"
+            UPDATE conversations
+            SET updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(conversation_id)
+        .execute(tx)
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Default)]
@@ -439,6 +461,32 @@ impl ParticipantRepository for ParticipantPgRepository {
         Ok(())
     }
 
+    async fn increment_unread_count_for_others<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        sender_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query(
+            r#"
+            UPDATE participants
+            SET unread_count = unread_count + 1
+            WHERE conversation_id = $1
+            AND user_id != $2
+            AND deleted_at IS NULL
+            "#,
+        )
+        .bind(conversation_id)
+        .bind(sender_id)
+        .execute(tx)
+        .await?;
+
+        Ok(())
+    }
+
     async fn reset_unread_count<'e, E>(
         &self,
         conversation_id: &Uuid,
@@ -457,6 +505,35 @@ impl ParticipantRepository for ParticipantPgRepository {
             AND deleted_at IS NULL
             "#,
         )
+        .bind(conversation_id)
+        .bind(user_id)
+        .execute(tx)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn mark_as_seen<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        last_seen_message_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        sqlx::query(
+            r#"
+            UPDATE participants
+            SET last_seen_message_id = $1,
+                unread_count = 0
+            WHERE conversation_id = $2
+            AND user_id = $3
+            AND deleted_at IS NULL
+            "#,
+        )
+        .bind(last_seen_message_id)
         .bind(conversation_id)
         .bind(user_id)
         .execute(tx)

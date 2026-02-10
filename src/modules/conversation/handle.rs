@@ -56,3 +56,17 @@ pub async fn create_conversation(
 
     Ok(success::Success::ok(Some(conversation)).message("Successfully created conversation"))
 }
+
+#[post("/{conversation_id}/mark-as-seen")]
+pub async fn mark_as_seen(
+    conversation_svc: web::Data<ConversationSvc>,
+    conversation_id: web::Path<Uuid>,
+    req: HttpRequest,
+) -> Result<success::Success<String>, error::Error> {
+    let user_id = get_extensions::<Claims>(&req)?.sub;
+
+    conversation_svc.mark_as_seen(*conversation_id, user_id).await?;
+
+    Ok(success::Success::ok(Some("Messages marked as seen".to_string()))
+        .message("Successfully marked messages as seen"))
+}

@@ -16,4 +16,11 @@ pub trait UserRepository {
     #[allow(unused)]
     async fn update(&self, id: &Uuid, user: &UpdateUser) -> Result<UserEntity, error::SystemError>;
     async fn delete(&self, id: &Uuid) -> Result<bool, error::SystemError>;
+
+    /// Search users by username or display name (case-insensitive, partial match)
+    async fn search_users(
+        &self,
+        query: &str,
+        limit: i32,
+    ) -> Result<Vec<UserEntity>, error::SystemError>;
 }

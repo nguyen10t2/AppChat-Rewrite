@@ -1,3 +1,4 @@
+use actix::Addr;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -10,6 +11,7 @@ use crate::{
             schema::{ConversationEntity, ConversationType},
         },
         message::{model::MessageQuery, repository::MessageRepository, schema::MessageEntity},
+        websocket::{events::BroadcastToRoom, message::ServerMessage, server::WebSocketServer},
     },
 };
 
@@ -23,6 +25,7 @@ where
     conversation_repo: Arc<R>,
     participant_repo: Arc<P>,
     message_repo: Arc<L>,
+    ws_server: Arc<Addr<WebSocketServer>>,
 }
 
 impl<R, P, L> ConversationService<R, P, L>
@@ -35,8 +38,9 @@ where
         conversation_repo: Arc<R>,
         participant_repo: Arc<P>,
         message_repo: Arc<L>,
+        ws_server: Arc<Addr<WebSocketServer>>,
     ) -> Self {
-        ConversationService { conversation_repo, participant_repo, message_repo }
+        ConversationService { conversation_repo, participant_repo, message_repo, ws_server }
     }
 
     #[allow(unused)]
@@ -94,6 +98,21 @@ where
 
         let conversation_detail =
             self.conversation_repo.find_one_conversation_detail(&conversation.id).await?;
+
+        // Broadcast new conversation to all participants
+        let conversation_json = serde_json::to_value(&conversation_detail).map_err(|e| {
+            error::SystemError::internal_error(format!("Failed to serialize conversation: {}", e))
+        })?;
+
+        // Broadcast to conversation room
+        self.ws_server.do_send(BroadcastToRoom {
+            conversation_id: conversation.id,
+            message: ServerMessage::NewMessage {
+                conversation_id: conversation.id,
+                message: conversation_json,
+            },
+            skip_user_id: Some(user_id), // Creator không cần nhận lại
+        });
 
         Ok(conversation_detail)
     }
@@ -215,5 +234,50 @@ where
                 self.conversation_repo.get_pool(),
             )
             .await
+    }
+
+    /// Mark messages as seen by updating last_seen_message_id and resetting unread count
+    pub async fn mark_as_seen(
+        &self,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<(), error::SystemError> {
+        let mut tx = self.conversation_repo.get_pool().begin().await?;
+
+        // Verify user is a participant of the conversation
+        let (_, is_member) = self
+            .conversation_repo
+            .get_conversation_and_check_membership(&conversation_id, &user_id, tx.as_mut())
+            .await?;
+
+        if !is_member {
+            return Err(error::SystemError::forbidden(
+                "User is not a participant of this conversation",
+            ));
+        }
+
+        // Get last message of the conversation
+        let last_message = self
+            .message_repo
+            .get_last_message_by_conversation(&conversation_id, tx.as_mut())
+            .await?;
+
+        if let Some(msg) = last_message {
+            // Check if user is the sender of the last message
+            if msg.sender_id == user_id {
+                // Sender doesn't need to mark as seen
+                tx.commit().await?;
+                return Ok(());
+            }
+
+            // Mark as seen with the last message ID
+            self.participant_repo
+                .mark_as_seen(&conversation_id, &user_id, &msg.id, tx.as_mut())
+                .await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }

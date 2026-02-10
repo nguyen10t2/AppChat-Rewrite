@@ -94,6 +94,15 @@ pub struct SignInResponse {
     pub access_token: String,
 }
 
+#[derive(Deserialize, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct UserSearchQuery {
+    #[validate(length(min = 2, message = "Search query must be at least 2 characters"))]
+    pub q: String,
+    #[validate(range(min = 1, max = 50, message = "Limit must be between 1 and 50"))]
+    pub limit: Option<i32>,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {

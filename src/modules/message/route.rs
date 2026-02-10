@@ -14,6 +14,8 @@ pub fn configure(cfg: &mut ServiceConfig) {
             .service(scope("/direct").wrap(from_fn(require_friend)).service(send_direct_message))
             .service(
                 scope("/group").wrap(from_fn(require_group_member)).service(send_group_message),
-            ),
+            )
+            .service(delete_message)
+            .service(edit_message),
     );
 }

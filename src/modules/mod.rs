@@ -40,3 +40,15 @@ pub mod conversation {
     pub mod schema;
     pub mod service;
 }
+
+pub mod file_upload {
+    pub mod handle;
+    pub mod model;
+    pub mod repository;
+    pub mod repository_pg;
+    pub mod route;
+    pub mod schema;
+    pub mod service;
+}
+
+pub mod websocket;

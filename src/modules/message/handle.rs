@@ -1,4 +1,5 @@
-use actix_web::{post, web, HttpRequest};
+use actix_web::{delete, patch, post, web, HttpRequest};
+use uuid::Uuid;
 
 use crate::{
     api::{error, success},
@@ -58,4 +59,35 @@ pub async fn send_group_message(
         message_service.send_group_message(user_id, body.content.clone(), conversation.id).await?;
 
     Ok(success::Success::ok(Some(message)).message("Send group message successfully"))
+}
+
+#[delete("/{message_id}")]
+pub async fn delete_message(
+    message_service: web::Data<MessageSvc>,
+    message_id: web::Path<Uuid>,
+    req: HttpRequest,
+) -> Result<success::Success<()>, error::Error> {
+    let user_id = get_extensions::<Claims>(&req)?.sub;
+    message_service.delete_message(*message_id, user_id).await?;
+    Ok(success::Success::no_content())
+}
+
+#[patch("/{message_id}")]
+pub async fn edit_message(
+    message_service: web::Data<MessageSvc>,
+    message_id: web::Path<Uuid>,
+    body: web::Json<serde_json::Value>,
+    req: HttpRequest,
+) -> Result<success::Success<MessageEntity>, error::Error> {
+    let user_id = get_extensions::<Claims>(&req)?.sub;
+
+    // Extract content from request body
+    let new_content: String = body
+        .get("content")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| error::Error::bad_request("Content is required"))?
+        .to_string();
+
+    let message = message_service.edit_message(*message_id, user_id, new_content).await?;
+    Ok(success::Success::ok(Some(message)).message("Message edited successfully"))
 }

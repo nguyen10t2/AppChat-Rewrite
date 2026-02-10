@@ -99,4 +99,29 @@ impl UserRepository for UserRepositoryPg {
 
         Ok(rows > 0)
     }
+
+    async fn search_users(
+        &self,
+        query: &str,
+        limit: i32,
+    ) -> Result<Vec<UserEntity>, error::SystemError> {
+        let search_pattern = format!("%{}%", query);
+        let users = sqlx::query_as::<_, UserEntity>(
+            r#"
+            SELECT * FROM users
+            WHERE deleted_at IS NULL
+            AND (
+                lower(username) LIKE lower($1)
+                OR lower(display_name) LIKE lower($1)
+            )
+            ORDER BY display_name
+            LIMIT $2
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(users)
+    }
 }

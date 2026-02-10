@@ -13,6 +13,7 @@ pub fn configure(cfg: &mut ServiceConfig) {
             .service(update_user)
             .service(get_profile)
             .service(get_user)
-            .service(delete_user),
+            .service(delete_user)
+            .service(search_users),
     );
 }

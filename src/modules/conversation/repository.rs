@@ -76,6 +76,15 @@ pub trait ConversationRepository {
     ) -> Result<(Option<ConversationEntity>, bool), error::SystemError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
+
+    /// Update conversation's updated_at timestamp to current time
+    async fn update_timestamp<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 }
 
 #[async_trait::async_trait]
@@ -97,11 +106,32 @@ pub trait ParticipantRepository {
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 
+    /// Increment unread count for all participants in a conversation except the sender
+    async fn increment_unread_count_for_others<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        sender_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>;
+
     #[allow(unused)]
     async fn reset_unread_count<'e, E>(
         &self,
         conversation_id: &Uuid,
         user_id: &Uuid,
+        tx: E,
+    ) -> Result<(), error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>;
+
+    /// Mark messages as seen by updating last_seen_message_id and resetting unread count
+    async fn mark_as_seen<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        user_id: &Uuid,
+        last_seen_message_id: &Uuid,
         tx: E,
     ) -> Result<(), error::SystemError>
     where

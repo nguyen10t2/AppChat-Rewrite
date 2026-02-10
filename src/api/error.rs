@@ -93,6 +93,8 @@ impl ResponseError for Error {
 
 #[derive(thiserror::Error, Debug)]
 pub enum SystemError {
+    #[error("IO Error")]
+    IOError(#[from] std::io::Error),
     // jwt errors
     #[error("JWT Error")]
     JwtError(#[from] jsonwebtoken::errors::Error),
@@ -124,7 +126,7 @@ pub enum SystemError {
     #[error("Database Conflict: {0:?}")]
     Conflict(Option<DbErrorMeta>),
     #[error("Internal System Error: {0}")]
-    InternalError(Box<dyn std::error::Error + Send + Sync>),
+    InternalError(Cow<'static, str>),
 }
 
 fn conflict_message(meta: &Option<DbErrorMeta>) -> Cow<'static, str> {
@@ -191,7 +193,7 @@ impl From<sqlx::Error> for SystemError {
                 }
             }
         }
-        (SystemError::InternalError(Box::new(err)))
+        (SystemError::InternalError(err.to_string().into()))
     }
 }
 
@@ -210,5 +212,9 @@ impl SystemError {
 
     pub fn forbidden(msg: impl Into<Cow<'static, str>>) -> Self {
         Self::Forbidden(msg.into())
+    }
+
+    pub fn internal_error(msg: impl Into<Cow<'static, str>>) -> Self {
+        Self::InternalError(msg.into())
     }
 }

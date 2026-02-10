@@ -1,3 +1,4 @@
+use actix::Actor;
 use actix_cors::Cors;
 use actix_web::{
     self,
@@ -16,9 +17,11 @@ use crate::{
             },
             service::ConversationService,
         },
+        file_upload::{repository_pg::FilePgRepository, service::FileUploadService},
         friend::{repository_pg::FriendRepositoryPg, service::FriendService},
         message::{repository_pg::MessageRepositoryPg, service::MessageService},
         user::{repository_pg::UserRepositoryPg, schema::UserRole, service::UserService},
+        websocket::{handler::websocket_handler, server::WebSocketServer},
     },
 };
 
@@ -32,8 +35,13 @@ mod utils;
 
 pub static ENV: LazyLock<constants::Env> = LazyLock::new(|| {
     dotenvy::dotenv().ok();
-    env_logger::init();
-    log::info!("Environment variables loaded from .env file");
+
+    // Setup tracing subscriber cho logging
+    tracing_subscriber::fmt().with_target(false).with_thread_ids(true).init();
+
+    tracing::info!("Tracing initialized");
+    tracing::info!("Environment variables loaded from .env file");
+
     constants::Env::default()
 });
 
@@ -57,15 +65,18 @@ async fn main() -> std::io::Result<()> {
     let _conversation_repo =
         ConversationPgRepository::new(db_pool.clone(), _participant_repo.clone());
     let _last_message_repo = LastMessagePgRepository::default();
-
+    let _file_repo = FilePgRepository::new(db_pool.clone());
+    let ws_server = WebSocketServer::new().start();
     let user_service =
         UserService::with_dependencies(Arc::new(_user_repo.clone()), Arc::new(redis_pool.clone()));
     let friend_service =
         FriendService::with_dependencies(Arc::new(_friend_repo), Arc::new(_user_repo.clone()));
+    let file_upload_service = FileUploadService::with_defaults(Arc::new(_file_repo));
     let conversation_service = ConversationService::with_dependencies(
         Arc::new(_conversation_repo.clone()),
         Arc::new(_participant_repo.clone()),
         Arc::new(_message_repo.clone()),
+        Arc::new(ws_server.clone()),
     );
     let message_service = MessageService::with_dependencies(
         Arc::new(_conversation_repo.clone()),
@@ -73,9 +84,12 @@ async fn main() -> std::io::Result<()> {
         Arc::new(_participant_repo),
         Arc::new(_last_message_repo),
         Arc::new(redis_pool),
+        Arc::new(ws_server.clone()),
     );
 
     println!("Starting server at http://{}:{}", ENV.ip.as_str(), ENV.port);
+    tracing::info!("Starting HTTP server at http://{}:{}", ENV.ip.as_str(), ENV.port);
+
     HttpServer::new(move || {
         let cors = Cors::permissive();
 
@@ -84,10 +98,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(Logger::default())
             .app_data(web::Data::new(user_service.clone()))
             .app_data(web::Data::new(friend_service.clone()))
+            .app_data(web::Data::new(file_upload_service.clone()))
             .app_data(web::Data::new(db_pool.clone()))
             .app_data(web::Data::new(conversation_service.clone()))
             .app_data(web::Data::new(message_service.clone()))
+            .app_data(web::Data::new(ws_server.clone())) // WebSocket server
             .service(health_check)
+            // WebSocket endpoint (không cần authentication - auth trong WS handshake)
+            .route("/ws", web::get().to(websocket_handler))
             .service(
                 web::scope("/api")
                     .default_service(
@@ -103,7 +121,8 @@ async fn main() -> std::io::Result<()> {
                             .configure(modules::user::route::configure)
                             .configure(modules::friend::route::configure)
                             .configure(modules::conversation::route::configure)
-                            .configure(modules::message::route::configure),
+                            .configure(modules::message::route::configure)
+                            .configure(modules::file_upload::route::configure::<FilePgRepository>),
                     ),
             )
     })

@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Clone, Type, Serialize, Deserialize)]
 #[sqlx(type_name = "message_type", rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum MessageType {
     Text,
     Image,
@@ -13,6 +14,7 @@ pub enum MessageType {
 }
 
 #[derive(Debug, Clone, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MessageEntity {
     pub id: Uuid,
     pub conversation_id: Uuid,
