@@ -9,11 +9,11 @@ use rand::rngs::OsRng;
 use serde::{de::Deserializer, Deserialize, Serialize};
 use validator::Validate;
 
+use std::sync::LazyLock;
+
 use crate::{api::error, modules::user::schema::UserRole};
 
-lazy_static::lazy_static! {
-  static ref ARGON2: Argon2<'static> = Argon2::default();
-}
+static ARGON2: LazyLock<Argon2<'static>> = LazyLock::new(Argon2::default);
 
 pub fn hash_password(password: &str) -> Result<String, error::SystemError> {
     let salt = SaltString::generate(&mut OsRng);

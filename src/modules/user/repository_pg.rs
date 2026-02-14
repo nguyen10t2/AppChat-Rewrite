@@ -68,20 +68,23 @@ impl UserRepository for UserRepositoryPg {
             username     = COALESCE($2, username),
             email        = COALESCE($3, email),
             display_name = COALESCE($4, display_name),
-            avatar_url   = $5,
-            bio          = $6,
-            phone        = $7
+            avatar_url   = CASE WHEN $5::boolean THEN $6 ELSE avatar_url END,
+            bio          = CASE WHEN $7::boolean THEN $8 ELSE bio END,
+            phone        = CASE WHEN $9::boolean THEN $10 ELSE phone END
         WHERE id = $1
         RETURNING *
         "#,
         )
         .bind(id)
-        .bind(&user.username) // Option<String>
-        .bind(&user.email) // Option<String>
-        .bind(&user.display_name) // Option<String>
-        .bind(&user.avatar_url) // Option<Option<String>>
-        .bind(&user.bio) // Option<Option<String>>
-        .bind(&user.phone) // Option<Option<String>>
+        .bind(&user.username) // $2: Option<String>
+        .bind(&user.email) // $3: Option<String>
+        .bind(&user.display_name) // $4: Option<String>
+        .bind(user.avatar_url.is_some()) // $5: bool - was avatar_url provided?
+        .bind(user.avatar_url.as_ref().and_then(|v| v.as_ref())) // $6: Option<&String>
+        .bind(user.bio.is_some()) // $7: bool - was bio provided?
+        .bind(user.bio.as_ref().and_then(|v| v.as_ref())) // $8: Option<&String>
+        .bind(user.phone.is_some()) // $9: bool - was phone provided?
+        .bind(user.phone.as_ref().and_then(|v| v.as_ref())) // $10: Option<&String>
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| error::SystemError::not_found("User not found"))?;
@@ -105,7 +108,7 @@ impl UserRepository for UserRepositoryPg {
         query: &str,
         limit: i32,
     ) -> Result<Vec<UserEntity>, error::SystemError> {
-        let search_pattern = format!("%{}%", query);
+        let search_pattern = format!("%{}%", query.replace('%', "\\%").replace('_', "\\_"));
         let users = sqlx::query_as::<_, UserEntity>(
             r#"
             SELECT * FROM users

@@ -1,6 +1,11 @@
-#![allow(unused)]
+/// Message Service
+///
+/// Service layer xử lý business logic cho messages, bao gồm:
+/// - Gửi tin nhắn (direct và group)
+/// - Xóa và chỉnh sửa tin nhắn
+/// - Broadcast real-time qua WebSocket
 use actix::Addr;
-use jsonwebtoken::signature::digest::crypto_common::ParBlocks;
+use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -12,11 +17,12 @@ use crate::modules::conversation::repository::{
 };
 use crate::modules::message::model::InsertMessage;
 use crate::modules::message::repository::MessageRepository;
-use crate::modules::message::schema::{MessageEntity, MessageType};
+use crate::modules::message::schema::MessageEntity;
 use crate::modules::websocket::events::BroadcastToRoom;
-use crate::modules::websocket::message::ServerMessage;
+use crate::modules::websocket::message::{LastMessageInfo, SenderInfo, ServerMessage};
 use crate::modules::websocket::server::WebSocketServer;
 
+/// Message service với generic repositories để dễ testing
 #[derive(Clone)]
 pub struct MessageService<M, C, P, L>
 where
@@ -40,6 +46,7 @@ where
     P: ParticipantRepository + Send + Sync,
     L: LastMessageRepository + Send + Sync,
 {
+    /// Tạo MessageService với các dependencies
     pub fn with_dependencies(
         conversation_repo: Arc<C>,
         message_repo: Arc<M>,
@@ -58,6 +65,14 @@ where
         }
     }
 
+    /// Gửi direct message giữa 2 users
+    ///
+    /// Flow:
+    /// 1. Tìm hoặc tạo conversation
+    /// 2. Tạo message trong DB
+    /// 3. Increment unread count cho recipient
+    /// 4. Upsert last message
+    /// 5. Broadcast qua WebSocket
     pub async fn send_direct_message(
         &self,
         sender_id: Uuid,
@@ -105,35 +120,41 @@ where
                 &NewLastMessage {
                     conversation_id: conversation.id,
                     sender_id,
-                    content: Some(content),
+                    content: Some(content.clone()),
                     created_at: message.created_at,
                 },
                 tx.as_mut(),
             )
             .await?;
 
-        // BUG-003 FIX: Update conversation timestamp when new message is sent
         self.conversation_repo.update_timestamp(&conversation.id, tx.as_mut()).await?;
+
+        // Get unread counts for all participants
+        let unread_counts = self
+            .participant_repo
+            .get_unread_counts(&conversation.id, tx.as_mut())
+            .await?;
 
         tx.commit().await?;
 
-        // Broadcast new message to conversation room
-        let message_json = serde_json::to_value(&message).map_err(|e| {
-            error::SystemError::internal_error(format!("Failed to serialize message: {}", e))
-        })?;
-
+        // Build and broadcast new message
+        let server_message = self.build_new_message_event(&message, &unread_counts);
         self.ws_server.do_send(BroadcastToRoom {
             conversation_id: conversation.id,
-            message: ServerMessage::NewMessage {
-                conversation_id: conversation.id,
-                message: message_json,
-            },
-            skip_user_id: Some(sender_id), // Sender không cần nhận lại
+            message: server_message,
+            skip_user_id: Some(sender_id),
         });
 
         Ok(message)
     }
 
+    /// Gửi group message
+    ///
+    /// Flow:
+    /// 1. Tạo message trong DB
+    /// 2. Increment unread count cho tất cả participants (trừ sender)
+    /// 3. Upsert last message
+    /// 4. Broadcast qua WebSocket
     pub async fn send_group_message(
         &self,
         sender_id: Uuid,
@@ -150,7 +171,6 @@ where
             )
             .await?;
 
-        // BUG-001 FIX: Increment unread count for all participants EXCEPT the sender
         self.participant_repo
             .increment_unread_count_for_others(&conversation_id, &sender_id, tx.as_mut())
             .await?;
@@ -167,26 +187,30 @@ where
             )
             .await?;
 
-        // BUG-003 FIX: Update conversation timestamp when new message is sent
         self.conversation_repo.update_timestamp(&conversation_id, tx.as_mut()).await?;
+
+        // Get unread counts for all participants
+        let unread_counts = self
+            .participant_repo
+            .get_unread_counts(&conversation_id, tx.as_mut())
+            .await?;
 
         tx.commit().await?;
 
-        // Broadcast new message to conversation room
-        let message_json = serde_json::to_value(&message).map_err(|e| {
-            error::SystemError::internal_error(format!("Failed to serialize message: {}", e))
-        })?;
-
+        // Build and broadcast new message
+        let server_message = self.build_new_message_event(&message, &unread_counts);
         self.ws_server.do_send(BroadcastToRoom {
             conversation_id,
-            message: ServerMessage::NewMessage { conversation_id, message: message_json },
-            skip_user_id: Some(sender_id), // Sender không cần nhận lại
+            message: server_message,
+            skip_user_id: Some(sender_id),
         });
 
         Ok(message)
     }
 
-    /// Delete a message by ID (soft delete)
+    /// Xóa message (soft delete)
+    ///
+    /// Chỉ sender mới có thể xóa message của mình
     pub async fn delete_message(
         &self,
         message_id: Uuid,
@@ -194,19 +218,16 @@ where
     ) -> Result<(), error::SystemError> {
         let mut tx = self.conversation_repo.get_pool().begin().await?;
 
-        // Get message to verify ownership and get conversation_id
         let message = self
             .message_repo
             .find_by_id(&message_id, tx.as_mut())
             .await?
             .ok_or_else(|| error::SystemError::not_found("Message not found"))?;
 
-        // Verify user is the sender
         if message.sender_id != user_id {
             return Err(error::SystemError::forbidden("You can only delete your own messages"));
         }
 
-        // Delete the message
         let deleted = self.message_repo.delete_message(&message_id, &user_id, tx.as_mut()).await?;
 
         if !deleted {
@@ -215,20 +236,21 @@ where
 
         tx.commit().await?;
 
-        // Broadcast message deletion to conversation room
         self.ws_server.do_send(BroadcastToRoom {
             conversation_id: message.conversation_id,
             message: ServerMessage::MessageDeleted {
                 conversation_id: message.conversation_id,
                 message_id,
             },
-            skip_user_id: None, // Broadcast to all including sender
+            skip_user_id: None,
         });
 
         Ok(())
     }
 
-    /// Edit a message by ID (only content can be edited)
+    /// Chỉnh sửa message
+    ///
+    /// Chỉ sender mới có thể edit message của mình
     pub async fn edit_message(
         &self,
         message_id: Uuid,
@@ -237,19 +259,16 @@ where
     ) -> Result<MessageEntity, error::SystemError> {
         let mut tx = self.conversation_repo.get_pool().begin().await?;
 
-        // Get message to verify ownership and get conversation_id
         let message = self
             .message_repo
             .find_by_id(&message_id, tx.as_mut())
             .await?
             .ok_or_else(|| error::SystemError::not_found("Message not found"))?;
 
-        // Verify user is the sender
         if message.sender_id != user_id {
             return Err(error::SystemError::forbidden("You can only edit your own messages"));
         }
 
-        // Edit the message
         let edited_message = self
             .message_repo
             .edit_message(&message_id, &user_id, &new_content, tx.as_mut())
@@ -258,7 +277,6 @@ where
 
         tx.commit().await?;
 
-        // Broadcast message edit to conversation room
         self.ws_server.do_send(BroadcastToRoom {
             conversation_id: message.conversation_id,
             message: ServerMessage::MessageEdited {
@@ -266,9 +284,43 @@ where
                 message_id,
                 new_content,
             },
-            skip_user_id: None, // Broadcast to all including sender
+            skip_user_id: None,
         });
 
         Ok(edited_message)
+    }
+
+    /// Helper: Build new-message event với format tương thích Socket.IO
+    fn build_new_message_event(
+        &self,
+        message: &MessageEntity,
+        unread_counts: &HashMap<Uuid, i32>,
+    ) -> ServerMessage {
+        let message_json = serde_json::to_value(message).unwrap_or_default();
+
+        let last_message = LastMessageInfo {
+            _id: message.id,
+            content: message.content.clone(),
+            created_at: message.created_at.to_rfc3339(),
+            sender: SenderInfo {
+                _id: message.sender_id,
+                display_name: String::new(), // Will be filled by frontend from cache
+                avatar_url: None,
+            },
+        };
+
+        // Convert HashMap<Uuid, i32> to JSON object with string keys
+        let unread_counts_json: serde_json::Value = unread_counts
+            .iter()
+            .map(|(k, v)| (k.to_string(), serde_json::Value::Number((*v).into())))
+            .collect();
+
+        ServerMessage::new_message(
+            message_json,
+            message.conversation_id,
+            last_message,
+            message.created_at.to_rfc3339(),
+            unread_counts_json,
+        )
     }
 }

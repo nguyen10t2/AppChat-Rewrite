@@ -10,9 +10,9 @@ CREATE TABLE "users" (
 	"avatar_id" text,
 	"bio" varchar(300),
 	"phone" varchar(20),
-	"deleted_at" timestamp,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"deleted_at" timestamptz,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "friend_requests" (
@@ -20,15 +20,15 @@ CREATE TABLE "friend_requests" (
 	"from_user_id" uuid NOT NULL,
 	"to_user_id" uuid NOT NULL,
 	"message" varchar(300),
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "friend_request_not_self" CHECK ("friend_requests"."from_user_id" <> "friend_requests"."to_user_id")
 );
 --> statement-breakpoint
 CREATE TABLE "friends" (
 	"user_a" uuid NOT NULL,
 	"user_b" uuid NOT NULL,
-	"deleted_at" timestamp,
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamptz,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "friends_user_a_user_b_pk" PRIMARY KEY("user_a","user_b"),
 	CONSTRAINT "friends_user_order" CHECK ("friends"."user_a" < "friends"."user_b"),
 	CONSTRAINT "friends_not_self" CHECK ("friends"."user_a" <> "friends"."user_b")

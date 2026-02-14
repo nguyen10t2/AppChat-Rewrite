@@ -1,11 +1,9 @@
-#![allow(unused)]
+#![allow(dead_code)]
 use actix_web::{
-    body,
-    http::{header, StatusCode},
+    http::StatusCode,
     HttpResponse, ResponseError,
 };
 use deadpool_redis::{redis::RedisError, CreatePoolError, PoolError};
-use serde_json::json;
 use std::borrow::Cow;
 
 use crate::ENV;
@@ -165,7 +163,7 @@ impl From<SystemError> for Error {
             SystemError::NotFound(msg) => Error::NotFound(msg),
             SystemError::Conflict(meta) => Error::Conflict(conflict_message(&meta)),
             _ => {
-                log::error!("Internal Server Error: {:?}", value);
+                tracing::error!("Internal Server Error: {:?}", value);
                 Error::InternalServer
             }
         }
@@ -174,7 +172,7 @@ impl From<SystemError> for Error {
 
 impl From<sqlx::Error> for SystemError {
     fn from(err: sqlx::Error) -> Self {
-        log::error!("{:?}", err);
+        tracing::error!("{:?}", err);
         if let sqlx::Error::Database(db_err) = &err {
             match db_err.code().as_deref() {
                 Some("23505") => {
@@ -188,12 +186,12 @@ impl From<sqlx::Error> for SystemError {
                     return SystemError::NotFound("Resource not found".into());
                 }
                 _ => {
-                    log::error!("Unhandled DB error: {:?}", db_err);
+                    tracing::error!("Unhandled DB error: {:?}", db_err);
                     return SystemError::DatabaseError(db_err.message().to_string().into());
                 }
             }
         }
-        (SystemError::InternalError(err.to_string().into()))
+        SystemError::InternalError(err.to_string().into())
     }
 }
 

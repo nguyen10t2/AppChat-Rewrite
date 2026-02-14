@@ -47,7 +47,6 @@ where
         id: Uuid,
         user: UpdateUserModel,
     ) -> Result<UserResponse, error::SystemError> {
-        println!("UpdateUserModel: {:?}", user);
         if user.is_empty() {
             return Err(error::SystemError::bad_request("No fields to update"));
         }
@@ -55,12 +54,7 @@ where
         let update_user = UpdateUser {
             username: user.username,
             email: user.email,
-            display_name: match (user.first_name, user.last_name) {
-                (Some(first), Some(last)) => Some(format!("{} {}", first, last)),
-                (Some(first), None) => Some(first),
-                (None, Some(last)) => Some(last),
-                _ => None,
-            },
+            display_name: user.display_name,
             avatar_url: user.avatar_url,
             bio: user.bio,
             phone: user.phone,
@@ -90,7 +84,7 @@ where
             username: user.username,
             email: user.email,
             hash_password,
-            display_name: format!("{} {}", user.first_name, user.last_name),
+            display_name: user.display_name,
         };
 
         let user_id = self.repo.create(&new_user).await?;

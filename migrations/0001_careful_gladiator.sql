@@ -2,8 +2,8 @@ CREATE TYPE "public"."conversation_type" AS ENUM('direct', 'group');--> statemen
 CREATE TABLE "conversations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"type" "conversation_type" DEFAULT 'direct' NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "group_conversations" (
@@ -19,7 +19,7 @@ CREATE TABLE "last_messages" (
 	"content" text,
 	"sender_id" uuid NOT NULL,
 	"conversation_id" uuid NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
 	CONSTRAINT "last_messages_conversation_id_unique" UNIQUE("conversation_id")
 );
 --> statement-breakpoint
@@ -27,8 +27,8 @@ CREATE TABLE "participants" (
 	"conversation_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
 	"unread_count" integer DEFAULT 0 NOT NULL,
-	"joined_at" timestamp DEFAULT now() NOT NULL,
-	"deleted_at" timestamp,
+	"joined_at" timestamptz DEFAULT now() NOT NULL,
+	"deleted_at" timestamptz,
 	CONSTRAINT "participants_conversation_id_user_id_pk" PRIMARY KEY("conversation_id","user_id"),
 	CONSTRAINT "unread_count_non_negative" CHECK ("participants"."unread_count" >= 0)
 );

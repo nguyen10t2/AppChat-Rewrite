@@ -2,6 +2,7 @@ use crate::modules::message::schema::MessageEntity;
 use crate::modules::message::schema::MessageType;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Debug, Clone)]
 pub struct InsertMessage {
@@ -23,7 +24,6 @@ pub struct GetMessageResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SendDirectMessage {
     pub conversation_id: Option<Uuid>,
     pub recipient_id: Option<Uuid>,
@@ -32,5 +32,11 @@ pub struct SendDirectMessage {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SendGroupMessage {
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct EditMessageRequest {
+    #[validate(length(min = 1, max = 5000, message = "Content must be between 1 and 5000 characters"))]
     pub content: String,
 }

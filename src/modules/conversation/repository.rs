@@ -7,7 +7,7 @@ use crate::{
             ConversationDetail, ConversationRow, NewLastMessage, NewParticipant,
             ParticipantDetailWithConversation,
         },
-        schema::{ConversationEntity, ConversationType, LastMessageEntity, PartacipantEntity},
+        schema::{ConversationEntity, ConversationType, LastMessageEntity, ParticipantEntity},
     },
 };
 
@@ -93,7 +93,7 @@ pub trait ParticipantRepository {
         &self,
         participant: &NewParticipant,
         tx: E,
-    ) -> Result<PartacipantEntity, error::SystemError>
+    ) -> Result<ParticipantEntity, error::SystemError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 
@@ -142,6 +142,16 @@ pub trait ParticipantRepository {
         conversation_ids: &[Uuid],
         tx: E,
     ) -> Result<Vec<ParticipantDetailWithConversation>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>;
+
+    /// Get unread counts for all participants in a conversation
+    /// Returns a map of user_id -> unread_count
+    async fn get_unread_counts<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        tx: E,
+    ) -> Result<std::collections::HashMap<Uuid, i32>, error::SystemError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>;
 }

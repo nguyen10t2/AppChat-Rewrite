@@ -6,7 +6,7 @@ use validator::Validate;
 use crate::modules::user::schema::UserEntity;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-#[serde(rename_all = "camelCase")]
+
 pub struct FriendResponse {
     pub id: Uuid,
     pub username: String,
@@ -43,7 +43,7 @@ pub struct FriendUserRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-#[serde(rename_all = "camelCase")]
+
 pub struct FriendRequestResponse {
     pub id: Uuid,
     pub from: IdOrInfo,
@@ -53,7 +53,6 @@ pub struct FriendRequestResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
 pub struct FriendRequestBody {
     pub recipient_id: Uuid,
     pub message: Option<String>,

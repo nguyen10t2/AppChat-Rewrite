@@ -90,3 +90,39 @@ pub struct BroadcastToAll {
     /// Message cần broadcast
     pub message: ServerMessage,
 }
+
+/// Event: Gửi message đến nhiều users (dùng cho new-group)
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct SendToUsers {
+    /// Danh sách User IDs cần nhận message
+    pub user_ids: Vec<Uuid>,
+    /// Message cần gửi
+    pub message: ServerMessage,
+}
+
+/// Event: User thay đổi trạng thái presence (online/offline)
+/// Server sẽ chỉ gửi notification đến friends đang online (friend-scoped)
+#[derive(Message, Clone)]
+#[rtype(result = "()")]
+pub struct UserPresenceChanged {
+    /// User ID thay đổi trạng thái
+    pub user_id: Uuid,
+    /// True = online, False = offline
+    pub is_online: bool,
+    /// Danh sách friend IDs để notify
+    pub friend_ids: Vec<Uuid>,
+    /// Last seen timestamp (chỉ có khi offline)
+    pub last_seen: Option<String>,
+}
+
+/// Event: Gửi initial presence state cho user vừa connect
+/// Server kiểm tra friends nào đang online và gửi danh sách
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SendInitialPresence {
+    /// User ID vừa connect
+    pub user_id: Uuid,
+    /// Danh sách friend IDs để kiểm tra
+    pub friend_ids: Vec<Uuid>,
+}

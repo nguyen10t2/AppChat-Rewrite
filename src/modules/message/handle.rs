@@ -12,13 +12,13 @@ use crate::{
             schema::ConversationEntity,
         },
         message::{
-            model::{SendDirectMessage, SendGroupMessage},
+            model::{EditMessageRequest, SendDirectMessage, SendGroupMessage},
             repository_pg::MessageRepositoryPg,
             schema::MessageEntity,
             service::MessageService,
         },
     },
-    utils::Claims,
+    utils::{Claims, ValidatedJson},
 };
 
 type MessageSvc = MessageService<
@@ -76,18 +76,11 @@ pub async fn delete_message(
 pub async fn edit_message(
     message_service: web::Data<MessageSvc>,
     message_id: web::Path<Uuid>,
-    body: web::Json<serde_json::Value>,
+    ValidatedJson(body): ValidatedJson<EditMessageRequest>,
     req: HttpRequest,
 ) -> Result<success::Success<MessageEntity>, error::Error> {
     let user_id = get_extensions::<Claims>(&req)?.sub;
 
-    // Extract content from request body
-    let new_content: String = body
-        .get("content")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| error::Error::bad_request("Content is required"))?
-        .to_string();
-
-    let message = message_service.edit_message(*message_id, user_id, new_content).await?;
+    let message = message_service.edit_message(*message_id, user_id, body.content).await?;
     Ok(success::Success::ok(Some(message)).message("Message edited successfully"))
 }

@@ -9,8 +9,10 @@ use actix_ws::Message;
 use tokio::sync::mpsc;
 
 use super::message::ClientMessage;
+use super::presence::PresenceService;
 use super::server::WebSocketServer;
 use super::session::{MessageSvc, WebSocketSession};
+use crate::modules::friend::repository_pg::FriendRepositoryPg;
 
 /// HTTP handler để upgrade connection thành WebSocket
 ///
@@ -26,6 +28,8 @@ pub async fn websocket_handler(
     stream: web::Payload,
     server: web::Data<Addr<WebSocketServer>>,
     message_service: web::Data<MessageSvc>,
+    presence_service: web::Data<PresenceService>,
+    friend_repo: web::Data<FriendRepositoryPg>,
 ) -> Result<HttpResponse, Error> {
     tracing::debug!("WebSocket upgrade request từ {:?}", req.peer_addr());
 
@@ -35,8 +39,14 @@ pub async fn websocket_handler(
     // Tạo mpsc channel: session actor gửi JSON → spawned task → WebSocket → client
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
-    // Tạo session actor với outbound channel và message service
-    let ws_actor = WebSocketSession::new(server.get_ref().clone(), tx, message_service);
+    // Tạo session actor với outbound channel và dependencies
+    let ws_actor = WebSocketSession::new(
+        server.get_ref().clone(),
+        tx,
+        message_service,
+        presence_service,
+        friend_repo,
+    );
 
     use actix::Actor;
     let addr = ws_actor.start();

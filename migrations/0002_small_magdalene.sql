@@ -8,9 +8,9 @@ CREATE TABLE "messages" (
 	"content" text,
 	"file_url" text,
 	"is_edited" boolean DEFAULT false NOT NULL,
-	"deleted_at" timestamp,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"deleted_at" timestamptz,
+	"created_at" timestamptz DEFAULT now() NOT NULL,
+	"updated_at" timestamptz DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

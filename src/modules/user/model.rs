@@ -12,10 +12,8 @@ pub struct SignUpModel {
     pub email: String,
     #[validate(length(min = 6, message = "Password must be at least 6 characters long"))]
     pub password: String,
-    #[validate(length(min = 1, message = "First name cannot be empty"))]
-    pub first_name: String,
-    #[validate(length(min = 1, message = "Last name cannot be empty"))]
-    pub last_name: String,
+    #[validate(length(min = 1, message = "Display name cannot be empty"))]
+    pub display_name: String,
 }
 
 #[derive(Deserialize, Validate)]
@@ -41,10 +39,8 @@ pub struct UpdateUserModel {
     pub username: Option<String>,
     #[validate(email(message = "Invalid email format"))]
     pub email: Option<String>,
-    #[validate(length(min = 1, message = "First name cannot be empty"))]
-    pub first_name: Option<String>,
-    #[validate(length(min = 1, message = "Last name cannot be empty"))]
-    pub last_name: Option<String>,
+    #[validate(length(min = 1, message = "Display name cannot be empty"))]
+    pub display_name: Option<String>,
     #[serde(default, deserialize_with = "double_option")]
     pub avatar_url: Option<Option<String>>,
     #[serde(default, deserialize_with = "double_option")]
@@ -58,8 +54,7 @@ impl UpdateUserModel {
     pub fn is_empty(&self) -> bool {
         self.username.is_none()
             && self.email.is_none()
-            && self.first_name.is_none()
-            && self.last_name.is_none()
+            && self.display_name.is_none()
             && self.avatar_url.is_none()
             && self.bio.is_none()
             && self.phone.is_none()
@@ -89,13 +84,12 @@ pub struct SignUpResponse {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+
 pub struct SignInResponse {
     pub access_token: String,
 }
 
 #[derive(Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
 pub struct UserSearchQuery {
     #[validate(length(min = 2, message = "Search query must be at least 2 characters"))]
     pub q: String,
@@ -104,7 +98,7 @@ pub struct UserSearchQuery {
 }
 
 #[derive(Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+
 pub struct UserResponse {
     pub id: uuid::Uuid,
     pub username: String,
@@ -127,4 +121,10 @@ impl From<UserEntity> for UserResponse {
             phone: entity.phone,
         }
     }
+}
+
+/// Query body cho batch presence check
+#[derive(Debug, Deserialize)]
+pub struct PresenceQuery {
+    pub user_ids: Vec<uuid::Uuid>,
 }

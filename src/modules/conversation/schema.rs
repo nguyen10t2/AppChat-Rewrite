@@ -1,10 +1,11 @@
-#![allow(unused)]
+#![allow(dead_code)]
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::{FromRow, Type};
 use uuid::Uuid;
 
 #[derive(Debug, PartialEq, Clone, Type, Serialize, Deserialize)]
 #[sqlx(type_name = "conversation_type", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum ConversationType {
     Direct,
     Group,
@@ -20,7 +21,7 @@ pub struct ConversationEntity {
 }
 
 #[derive(Debug, Clone, FromRow)]
-pub struct PartacipantEntity {
+pub struct ParticipantEntity {
     pub conversation_id: Uuid,
     pub user_id: Uuid,
     pub unread_count: i32,

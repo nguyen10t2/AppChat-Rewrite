@@ -303,6 +303,25 @@ impl FriendRequestRepository for FriendRepositoryPg {
     }
 }
 
+impl FriendRepositoryPg {
+    /// Lấy danh sách friend IDs (lightweight, không join users table)
+    /// Dùng cho presence notifications - chỉ cần IDs, không cần thông tin chi tiết
+    pub async fn find_friend_ids(&self, user_id: &Uuid) -> Result<Vec<Uuid>, error::SystemError> {
+        let ids = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT CASE WHEN f.user_a = $1 THEN f.user_b ELSE f.user_a END
+            FROM friends f
+            WHERE f.user_a = $1 OR f.user_b = $1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(ids)
+    }
+}
+
 #[async_trait::async_trait]
 impl FriendRepo for FriendRepositoryPg {
     fn get_pool(&self) -> &sqlx::PgPool {

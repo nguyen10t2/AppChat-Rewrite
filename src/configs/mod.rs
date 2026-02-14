@@ -67,4 +67,9 @@ impl RedisCache {
         conn.del::<_, ()>(key).await?;
         Ok(())
     }
+
+    /// Expose Redis pool cho PresenceService
+    pub fn get_pool(&self) -> &deadpool_redis::Pool {
+        &self.pool
+    }
 }

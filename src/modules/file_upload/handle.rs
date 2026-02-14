@@ -11,13 +11,13 @@ use crate::modules::file_upload::service::FileUploadService;
 /// Upload file handler
 pub async fn upload_file<R>(
     mut payload: Multipart,
-    user_id: web::ReqData<Uuid>,
+    req: actix_web::HttpRequest,
     service: web::Data<FileUploadService<R>>,
 ) -> Result<success::Success<FileUploadResponse>, error::Error>
 where
     R: crate::modules::file_upload::repository::FileRepository + Send + Sync + 'static,
 {
-    let user_id = user_id.into_inner();
+    let user_id = crate::middlewares::get_extensions::<crate::utils::Claims>(&req)?.sub;
 
     // Process multipart form data
     if let Some(mut field) = payload.try_next().await.map_err(|_| error::Error::InternalServer)? {
@@ -71,14 +71,14 @@ where
 /// Delete file handler
 pub async fn delete_file<R>(
     file_id: web::Path<Uuid>,
-    user_id: web::ReqData<Uuid>,
+    req: actix_web::HttpRequest,
     service: web::Data<FileUploadService<R>>,
 ) -> Result<success::Success<String>, error::Error>
 where
     R: crate::modules::file_upload::repository::FileRepository + Send + Sync + 'static,
 {
     let file_id = file_id.into_inner();
-    let user_id = user_id.into_inner();
+    let user_id = crate::middlewares::get_extensions::<crate::utils::Claims>(&req)?.sub;
 
     // Get file to check ownership
     match service.get_file(&file_id).await {

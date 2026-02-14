@@ -9,7 +9,7 @@ use crate::modules::conversation::repository::{
     ConversationRepository, LastMessageRepository, ParticipantRepository,
 };
 use crate::modules::conversation::schema::{
-    ConversationType, LastMessageEntity, PartacipantEntity,
+    ConversationType, LastMessageEntity, ParticipantEntity,
 };
 use crate::{api::error, modules::conversation::schema::ConversationEntity};
 
@@ -415,11 +415,11 @@ impl ParticipantRepository for ParticipantPgRepository {
         &self,
         participant: &NewParticipant,
         tx: E,
-    ) -> Result<PartacipantEntity, error::SystemError>
+    ) -> Result<ParticipantEntity, error::SystemError>
     where
         E: sqlx::Executor<'e, Database = sqlx::Postgres>,
     {
-        let entity = sqlx::query_as::<_, PartacipantEntity>(
+        let entity = sqlx::query_as::<_, ParticipantEntity>(
             r#"
             INSERT INTO participants (conversation_id, user_id, unread_count)
             VALUES ($1, $2, $3)
@@ -570,6 +570,35 @@ impl ParticipantRepository for ParticipantPgRepository {
         .await?;
 
         Ok(participants)
+    }
+
+    async fn get_unread_counts<'e, E>(
+        &self,
+        conversation_id: &Uuid,
+        tx: E,
+    ) -> Result<std::collections::HashMap<Uuid, i32>, error::SystemError>
+    where
+        E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+    {
+        #[derive(sqlx::FromRow)]
+        struct UnreadCountRow {
+            user_id: Uuid,
+            unread_count: i32,
+        }
+
+        let rows = sqlx::query_as::<_, UnreadCountRow>(
+            r#"
+            SELECT user_id, unread_count
+            FROM participants
+            WHERE conversation_id = $1
+            AND deleted_at IS NULL
+            "#,
+        )
+        .bind(conversation_id)
+        .fetch_all(tx)
+        .await?;
+
+        Ok(rows.into_iter().map(|r| (r.user_id, r.unread_count)).collect())
     }
 }
 

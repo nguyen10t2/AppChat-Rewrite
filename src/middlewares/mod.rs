@@ -5,7 +5,7 @@ use actix_web::{
     web, Error, FromRequest, HttpMessage, HttpRequest,
 };
 use futures_util::{future::LocalBoxFuture, FutureExt};
-use serde::Deserialize;
+use serde::{Serialize, Deserialize};
 use std::rc::Rc;
 use uuid::Uuid;
 use validator::Validate;
@@ -64,9 +64,9 @@ pub fn authorization<B>(
 where
     B: MessageBody + 'static,
 {
-    let allowd_roles = Rc::new(allowed_roles);
+    let allowed_roles = Rc::new(allowed_roles);
     move |req: ServiceRequest, next: Next<B>| {
-        let roles = allowd_roles.clone();
+        let roles = allowed_roles.clone();
         async move {
             let role = get_extensions::<Claims>(req.request())?.role;
 
@@ -79,16 +79,12 @@ where
     }
 }
 
-#[allow(unused)]
-#[derive(Deserialize, Validate)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RequireBody {
     pub recipient_id: Option<Uuid>,
-    #[validate(length(min = 1))]
     pub member_ids: Option<Vec<Uuid>>,
 }
 
-#[allow(unused)]
 pub async fn require_friend(
     mut req: ServiceRequest,
     next: Next<BoxBody>,
@@ -98,10 +94,10 @@ pub async fn require_friend(
 
     let body_bytes = web::Bytes::from_request(http_req, payload)
         .await
-        .map_err(|_| error::Error::bad_request("Invalid Body"))?;
+        .map_err(|e| error::Error::bad_request(format!("Failed to read request body: {}", e)))?;
 
     let parsed = serde_json::from_slice::<RequireBody>(&body_bytes)
-        .map_err(|_| error::Error::bad_request("Invalid Body"))?;
+        .map_err(|e| error::Error::bad_request(format!("Invalid Body: {}", e)))?;
 
     if parsed.recipient_id.is_none() && parsed.member_ids.is_none() {
         return Err(error::Error::bad_request(

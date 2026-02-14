@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(dead_code)]
 use actix_web::HttpResponse;
 use std::borrow::Cow;
 
@@ -55,7 +55,7 @@ impl<T: serde::Serialize> Success<T> {
 impl<T: serde::Serialize> actix_web::Responder for Success<T> {
     type Body = actix_web::body::BoxBody;
 
-    fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
+    fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse<Self::Body> {
         let mut response = HttpResponse::build(self.status);
 
         for cookie in self.cookies {

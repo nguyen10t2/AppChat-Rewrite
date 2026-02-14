@@ -1,5 +1,10 @@
-use actix::Addr;
+/// Conversation Service
+///
+/// Service layer xử lý business logic cho conversations.
+/// Bao gồm tạo conversation, lấy danh sách, mark as seen, và WebSocket notifications.
 use std::{collections::HashMap, sync::Arc};
+
+use actix::Addr;
 use uuid::Uuid;
 
 use crate::{
@@ -11,10 +16,15 @@ use crate::{
             schema::{ConversationEntity, ConversationType},
         },
         message::{model::MessageQuery, repository::MessageRepository, schema::MessageEntity},
-        websocket::{events::BroadcastToRoom, message::ServerMessage, server::WebSocketServer},
+        websocket::{
+            events::{SendToUsers, BroadcastToRoom},
+            message::{LastMessageInfo, SenderInfo, ServerMessage},
+            server::WebSocketServer,
+        },
     },
 };
 
+/// ConversationService với generic repositories để dễ testing và decoupling
 #[derive(Clone)]
 pub struct ConversationService<R, P, L>
 where
@@ -34,6 +44,7 @@ where
     P: ParticipantRepository + Send + Sync,
     L: MessageRepository + Send + Sync,
 {
+    /// Tạo ConversationService với tất cả dependencies
     pub fn with_dependencies(
         conversation_repo: Arc<R>,
         participant_repo: Arc<P>,
@@ -43,7 +54,7 @@ where
         ConversationService { conversation_repo, participant_repo, message_repo, ws_server }
     }
 
-    #[allow(unused)]
+    /// Lấy conversation theo ID
     pub async fn get_by_id(
         &self,
         conversation_id: Uuid,
@@ -57,6 +68,10 @@ where
         Ok(conversation)
     }
 
+    /// Tạo conversation mới (direct hoặc group)
+    ///
+    /// Với direct: tạo hoặc trả về conversation hiện có giữa 2 users
+    /// Với group: tạo group mới và notify tất cả members
     pub async fn create_conversation(
         &self,
         _type: ConversationType,
@@ -99,24 +114,31 @@ where
         let conversation_detail =
             self.conversation_repo.find_one_conversation_detail(&conversation.id).await?;
 
-        // Broadcast new conversation to all participants
+        // Serialize conversation for WebSocket broadcast
         let conversation_json = serde_json::to_value(&conversation_detail).map_err(|e| {
             error::SystemError::internal_error(format!("Failed to serialize conversation: {}", e))
         })?;
 
-        // Broadcast to conversation room
-        self.ws_server.do_send(BroadcastToRoom {
-            conversation_id: conversation.id,
-            message: ServerMessage::NewMessage {
-                conversation_id: conversation.id,
-                message: conversation_json,
-            },
-            skip_user_id: Some(user_id), // Creator không cần nhận lại
-        });
+        // Broadcast dựa trên type
+        match _type {
+            ConversationType::Group => {
+                // Gửi new-group event tới tất cả members (trừ creator)
+                // Format tương thích với Socket.IO client
+                self.ws_server.do_send(SendToUsers {
+                    user_ids: member_ids.clone(),
+                    message: ServerMessage::NewGroup { conversation: conversation_json },
+                });
+            }
+            ConversationType::Direct => {
+                // Direct message không cần broadcast khi tạo mới
+                // Sẽ broadcast khi có message đầu tiên
+            }
+        }
 
         Ok(conversation_detail)
     }
 
+    /// Lấy tất cả conversations của user
     pub async fn get_by_user_id(
         &self,
         user_id: Uuid,
@@ -172,6 +194,7 @@ where
         Ok(res.collect())
     }
 
+    /// Lấy messages của conversation với cursor-based pagination
     pub async fn get_message(
         &self,
         conversation_id: Uuid,
@@ -206,7 +229,7 @@ where
         Ok((messages, next_cursor.map(|c| c.to_rfc3339())))
     }
 
-    #[allow(unused)]
+    /// Lấy participants của conversation
     pub async fn get_participants_by_conversation_id(
         &self,
         conversation_id: Uuid,
@@ -222,6 +245,7 @@ where
         Ok(participants)
     }
 
+    /// Kiểm tra user có phải member của conversation không
     pub async fn get_conversation_and_check_membership(
         &self,
         conversation_id: Uuid,
@@ -236,7 +260,10 @@ where
             .await
     }
 
-    /// Mark messages as seen by updating last_seen_message_id and resetting unread count
+    /// Mark messages as seen
+    ///
+    /// Cập nhật last_seen_message_id và reset unread count
+    /// Broadcast read-message event tới conversation room
     pub async fn mark_as_seen(
         &self,
         conversation_id: Uuid,
@@ -274,9 +301,36 @@ where
             self.participant_repo
                 .mark_as_seen(&conversation_id, &user_id, &msg.id, tx.as_mut())
                 .await?;
-        }
 
-        tx.commit().await?;
+            tx.commit().await?;
+
+            // Broadcast read-message event với format tương thích Socket.IO
+            let last_message_info = LastMessageInfo {
+                _id: msg.id,
+                content: msg.content.clone(),
+                created_at: msg.created_at.to_rfc3339(),
+                sender: SenderInfo {
+                    _id: msg.sender_id,
+                    display_name: String::new(),
+                    avatar_url: None,
+                },
+            };
+
+            // Tạo conversation update info
+            let conversation_update = serde_json::json!({
+                "_id": conversation_id,
+                "unreadCounts": {},
+                "seenBy": [user_id]
+            });
+
+            self.ws_server.do_send(BroadcastToRoom {
+                conversation_id,
+                message: ServerMessage::read_message(conversation_update, last_message_info),
+                skip_user_id: None,
+            });
+        } else {
+            tx.commit().await?;
+        }
 
         Ok(())
     }

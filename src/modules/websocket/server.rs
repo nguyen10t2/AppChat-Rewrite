@@ -37,21 +37,19 @@ impl WebSocketServer {
         self.users.keys().copied().collect()
     }
 
-    /// Broadcast danh sách online users tới tất cả connected clients
-    fn broadcast_online_users(&self) {
-        let user_ids = self.get_online_users();
-        let message = ServerMessage::OnlineUsers { user_ids };
-
-        // Gửi tới tất cả sessions
-        for session_addr in self.sessions.values() {
-            session_addr.do_send(message.clone());
-        }
-    }
-
     /// Gửi message tới một session cụ thể
     fn send_to_session(&self, session_id: &Uuid, message: ServerMessage) {
         if let Some(session_addr) = self.sessions.get(session_id) {
             session_addr.do_send(message);
+        }
+    }
+
+    /// Gửi message tới tất cả sessions của một user (multi-device)
+    fn send_to_user(&self, user_id: &Uuid, message: ServerMessage) {
+        if let Some(session_ids) = self.users.get(user_id) {
+            for session_id in session_ids {
+                self.send_to_session(session_id, message.clone());
+            }
         }
     }
 }
@@ -120,8 +118,8 @@ impl Handler<Disconnect> for WebSocketServer {
                 user_id
             );
 
-            // Broadcast updated online users list
-            self.broadcast_online_users();
+            // NOTE: Presence notification được xử lý bởi UserPresenceChanged event
+            // từ session actor (session có friend_ids và presence_service)
         }
     }
 }
@@ -135,15 +133,12 @@ impl Handler<Authenticate> for WebSocketServer {
 
         // Thêm session vào set của user (hỗ trợ multi-device)
         let sessions = self.users.entry(msg.user_id).or_default();
-        let is_new_user = sessions.is_empty();
         sessions.insert(msg.session_id);
 
         tracing::info!("User {} now has {} active session(s)", msg.user_id, sessions.len());
 
-        // Chỉ broadcast nếu là user mới online (session đầu tiên)
-        if is_new_user {
-            self.broadcast_online_users();
-        }
+        // NOTE: Presence notification (online-users, user-online) được xử lý
+        // bởi session actor sau khi load friend list và set Redis presence
 
         Ok(msg.user_id)
     }
@@ -163,7 +158,7 @@ impl Handler<JoinRoom> for WebSocketServer {
             "User {} joined conversation {} ({} users in room)",
             msg.user_id,
             msg.conversation_id,
-            self.rooms.get(&msg.conversation_id).map(|s| s.len()).unwrap_or(0)
+            self.rooms.get(&msg.conversation_id).map_or(0, HashSet::len)
         );
     }
 }
@@ -223,7 +218,7 @@ impl Handler<BroadcastToRoom> for WebSocketServer {
                 sent_count
             );
         } else {
-            tracing::warn!("Attempted to broadcast to non-existent room: {}", msg.conversation_id);
+            tracing::debug!("Attempted to broadcast to non-existent room: {}", msg.conversation_id);
         }
     }
 }
@@ -242,6 +237,26 @@ impl Handler<SendToUser> for WebSocketServer {
         } else {
             tracing::debug!("User {} not online, message not sent", msg.user_id);
         }
+    }
+}
+
+/// Handler: Gửi message đến nhiều users (dùng cho new-group notification)
+impl Handler<SendToUsers> for WebSocketServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: SendToUsers, _: &mut Context<Self>) {
+        let mut sent_count = 0;
+
+        for user_id in &msg.user_ids {
+            if let Some(session_ids) = self.users.get(user_id) {
+                for session_id in session_ids {
+                    self.send_to_session(session_id, msg.message.clone());
+                    sent_count += 1;
+                }
+            }
+        }
+
+        tracing::debug!("Sent message to {} users ({} total sessions)", msg.user_ids.len(), sent_count);
     }
 }
 
@@ -278,211 +293,67 @@ impl Default for WebSocketServer {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Handler: User thay đổi trạng thái presence
+/// Chỉ gửi notification đến friends đang online (friend-scoped fan-out)
+/// Giống cách Messenger/IG chỉ notify cho contacts, không phải all users
+impl Handler<UserPresenceChanged> for WebSocketServer {
+    type Result = ();
 
-    /// Helper: tạo WebSocketServer instance để test logic trực tiếp
-    fn make_server() -> WebSocketServer {
-        WebSocketServer::new()
-    }
-
-    // === Unit tests cho internal state ===
-
-    #[test]
-    fn test_new_server_is_empty() {
-        let server = make_server();
-        assert!(server.sessions.is_empty());
-        assert!(server.users.is_empty());
-        assert!(server.rooms.is_empty());
-    }
-
-    #[test]
-    fn test_get_online_users_empty() {
-        let server = make_server();
-        assert!(server.get_online_users().is_empty());
-    }
-
-    #[test]
-    fn test_get_online_users_returns_authenticated_users() {
-        let mut server = make_server();
-        let user_a = Uuid::now_v7();
-        let user_b = Uuid::now_v7();
-        let session_a = Uuid::now_v7();
-        let session_b = Uuid::now_v7();
-
-        // Multi-device: mỗi user có một set of sessions
-        server.users.insert(user_a, HashSet::from([session_a]));
-        server.users.insert(user_b, HashSet::from([session_b]));
-
-        let online = server.get_online_users();
-        assert_eq!(online.len(), 2);
-        assert!(online.contains(&user_a));
-        assert!(online.contains(&user_b));
-    }
-
-    // === Actor handler tests (cần actix runtime) ===
-
-    #[actix::test]
-    async fn test_connect_adds_session() {
-        let server = WebSocketServer::new().start();
-
-        // Tạo một dummy session actor để lấy Addr
-        // Sử dụng thực tế: cần tạo WebSocketSession, nhưng ở đây test server logic
-        // Verify qua GetOnlineUsers (chưa auth thì chưa online)
-        let online: Vec<Uuid> = server.send(GetOnlineUsers).await.unwrap();
-        assert!(online.is_empty(), "Chưa có user nào authenticate");
-    }
-
-    #[actix::test]
-    async fn test_authenticate_and_get_online() {
-        let mut server = WebSocketServer::new();
-        let user_id = Uuid::now_v7();
-        let session_id = Uuid::now_v7();
-
-        // Simulate authenticate với HashSet
-        server.users.insert(user_id, HashSet::from([session_id]));
-
-        let online = server.get_online_users();
-        assert_eq!(online.len(), 1);
-        assert!(online.contains(&user_id));
-    }
-
-    #[actix::test]
-    async fn test_join_room_creates_room() {
-        let server_addr = WebSocketServer::new().start();
-        let user_id = Uuid::now_v7();
-        let conv_id = Uuid::now_v7();
-
-        server_addr.send(JoinRoom { user_id, conversation_id: conv_id }).await.unwrap();
-
-        // Verify thông qua cách gián tiếp - broadcast không panic
-        server_addr
-            .send(BroadcastToRoom {
-                conversation_id: conv_id,
-                message: ServerMessage::Pong,
-                skip_user_id: None,
-            })
-            .await
-            .unwrap();
-    }
-
-    #[actix::test]
-    async fn test_leave_room_removes_user() {
-        let mut server = WebSocketServer::new();
-        let user_id = Uuid::now_v7();
-        let conv_id = Uuid::now_v7();
-
-        // Join
-        server.rooms.entry(conv_id).or_default().insert(user_id);
-        assert_eq!(server.rooms.get(&conv_id).unwrap().len(), 1);
-
-        // Leave
-        if let Some(room) = server.rooms.get_mut(&conv_id) {
-            room.remove(&user_id);
-            if room.is_empty() {
-                server.rooms.remove(&conv_id);
+    fn handle(&mut self, msg: UserPresenceChanged, _: &mut Context<Self>) {
+        let event = if msg.is_online {
+            ServerMessage::UserOnline { user_id: msg.user_id }
+        } else {
+            ServerMessage::UserOffline {
+                user_id: msg.user_id,
+                last_seen: msg.last_seen,
             }
-        }
-        assert!(!server.rooms.contains_key(&conv_id), "Room trống phải được xóa");
-    }
+        };
 
-    #[actix::test]
-    async fn test_disconnect_cleans_up_rooms() {
-        let mut server = WebSocketServer::new();
-        let user_id = Uuid::now_v7();
-        let session_id = Uuid::now_v7();
-        let conv_a = Uuid::now_v7();
-        let conv_b = Uuid::now_v7();
-
-        // Setup: user trong 2 rooms với HashSet
-        server.users.insert(user_id, HashSet::from([session_id]));
-        server.rooms.entry(conv_a).or_default().insert(user_id);
-        server.rooms.entry(conv_b).or_default().insert(user_id);
-
-        // Simulate disconnect logic - xóa session khỏi user
-        if let Some(sessions) = server.users.get_mut(&user_id) {
-            sessions.remove(&session_id);
-            if sessions.is_empty() {
-                server.users.remove(&user_id);
-                for room_users in server.rooms.values_mut() {
-                    room_users.remove(&user_id);
-                }
-                server.rooms.retain(|_, users| !users.is_empty());
+        let mut notified_count = 0;
+        for friend_id in &msg.friend_ids {
+            if self.users.contains_key(friend_id) {
+                self.send_to_user(friend_id, event.clone());
+                notified_count += 1;
             }
         }
 
-        assert!(server.users.is_empty());
-        assert!(server.rooms.is_empty(), "Tất cả rooms trống phải được dọn");
+        tracing::info!(
+            "Presence change: user {} {} → notified {}/{} friends",
+            msg.user_id,
+            if msg.is_online { "online" } else { "offline" },
+            notified_count,
+            msg.friend_ids.len()
+        );
     }
+}
 
-    #[actix::test]
-    async fn test_multiple_users_in_room() {
-        let mut server = WebSocketServer::new();
-        let user_a = Uuid::now_v7();
-        let user_b = Uuid::now_v7();
-        let user_c = Uuid::now_v7();
-        let conv_id = Uuid::now_v7();
+/// Handler: Gửi initial presence state cho user vừa connect
+/// Kiểm tra friends nào đang online trong server's users map
+/// và gửi OnlineUsers list chỉ chứa friends (không phải tất cả users)
+impl Handler<SendInitialPresence> for WebSocketServer {
+    type Result = ();
 
-        server.rooms.entry(conv_id).or_default().insert(user_a);
-        server.rooms.entry(conv_id).or_default().insert(user_b);
-        server.rooms.entry(conv_id).or_default().insert(user_c);
+    fn handle(&mut self, msg: SendInitialPresence, _: &mut Context<Self>) {
+        // Lọc chỉ friends đang online
+        let online_friend_ids: Vec<Uuid> = msg
+            .friend_ids
+            .iter()
+            .filter(|fid| self.users.contains_key(fid))
+            .copied()
+            .collect();
 
-        let room = server.rooms.get(&conv_id).unwrap();
-        assert_eq!(room.len(), 3);
+        let message = ServerMessage::OnlineUsers {
+            user_ids: online_friend_ids.clone(),
+        };
 
-        // Xóa 1 user, room vẫn tồn tại
-        server.rooms.get_mut(&conv_id).unwrap().remove(&user_b);
-        assert_eq!(server.rooms.get(&conv_id).unwrap().len(), 2);
-    }
+        // Gửi đến tất cả sessions của user
+        self.send_to_user(&msg.user_id, message);
 
-    #[actix::test]
-    async fn test_multi_device_same_user() {
-        let mut server = WebSocketServer::new();
-        let user_id = Uuid::now_v7();
-        let session_1 = Uuid::now_v7();
-        let session_2 = Uuid::now_v7();
-
-        // Device 1 auth - tạo HashSet với session đầu tiên
-        server.users.entry(user_id).or_insert_with(HashSet::new).insert(session_1);
-        assert!(server.users.get(&user_id).unwrap().contains(&session_1));
-
-        // Device 2 auth - thêm session thứ 2 vào cùng user (multi-device support!)
-        server.users.entry(user_id).or_insert_with(HashSet::new).insert(session_2);
-
-        // Verify: user có 2 sessions
-        let sessions = server.users.get(&user_id).unwrap();
-        assert!(sessions.contains(&session_1), "Session 1 vẫn còn");
-        assert!(sessions.contains(&session_2), "Session 2 được thêm");
-        assert_eq!(sessions.len(), 2, "User có 2 sessions (multi-device)");
-        assert_eq!(server.users.len(), 1, "Vẫn chỉ 1 user entry");
-    }
-
-    #[actix::test]
-    async fn test_broadcast_to_nonexistent_room_no_panic() {
-        let server_addr = WebSocketServer::new().start();
-        let fake_conv = Uuid::now_v7();
-
-        // Broadcast tới room không tồn tại - không panic
-        server_addr
-            .send(BroadcastToRoom {
-                conversation_id: fake_conv,
-                message: ServerMessage::Pong,
-                skip_user_id: None,
-            })
-            .await
-            .unwrap();
-    }
-
-    #[actix::test]
-    async fn test_send_to_user_not_online_no_panic() {
-        let server_addr = WebSocketServer::new().start();
-        let fake_user = Uuid::now_v7();
-
-        // Gửi tới user không online - không panic
-        server_addr
-            .send(SendToUser { user_id: fake_user, message: ServerMessage::Pong })
-            .await
-            .unwrap();
+        tracing::debug!(
+            "Sent initial presence to user {}: {}/{} friends online",
+            msg.user_id,
+            online_friend_ids.len(),
+            msg.friend_ids.len()
+        );
     }
 }

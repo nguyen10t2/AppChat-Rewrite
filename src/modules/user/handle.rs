@@ -1,5 +1,5 @@
 use actix_web::{
-    cookie::{time, Cookie},
+    cookie::{self, time, Cookie},
     delete, get, patch, post, web, HttpRequest,
 };
 use uuid::Uuid;
@@ -14,6 +14,7 @@ use crate::{
     modules::user::{model::SignUpResponse, repository_pg::UserRepositoryPg},
     utils::Claims,
 };
+use crate::modules::websocket::presence::{PresenceInfo, PresenceService};
 
 pub type UserSvc = UserService<UserRepositoryPg>;
 
@@ -40,9 +41,15 @@ pub async fn get_user(
 pub async fn update_user(
     user_service: web::Data<UserSvc>,
     user_id: web::Path<Uuid>,
+    req: HttpRequest,
     ValidatedJson(user_data): ValidatedJson<model::UpdateUserModel>,
 ) -> Result<success::Success<()>, error::Error> {
-    user_service.update(user_id.into_inner(), user_data).await?;
+    let auth_user_id = get_extensions::<Claims>(&req)?.sub;
+    let target_id = user_id.into_inner();
+    if auth_user_id != target_id {
+        return Err(error::Error::forbidden("You can only update your own profile"));
+    }
+    user_service.update(target_id, user_data).await?;
     Ok(success::Success::ok(None).message("User updated successfully"))
 }
 
@@ -50,8 +57,14 @@ pub async fn update_user(
 pub async fn delete_user(
     user_service: web::Data<UserSvc>,
     user_id: web::Path<Uuid>,
+    req: HttpRequest,
 ) -> Result<success::Success<()>, error::Error> {
-    user_service.delete(user_id.into_inner()).await?;
+    let auth_user_id = get_extensions::<Claims>(&req)?.sub;
+    let target_id = user_id.into_inner();
+    if auth_user_id != target_id {
+        return Err(error::Error::forbidden("You can only delete your own account"));
+    }
+    user_service.delete(target_id).await?;
     Ok(success::Success::no_content())
 }
 
@@ -74,6 +87,8 @@ pub async fn sign_in(
     let refresh_cookie = Cookie::build("refresh_token", refresh_token)
         .path("/")
         .http_only(true)
+        .same_site(cookie::SameSite::Strict)
+        .secure(true)
         .max_age(time::Duration::seconds(ENV.refresh_token_expiration as i64))
         .finish();
 
@@ -92,6 +107,8 @@ pub async fn sign_out(
     let refresh_cookie = Cookie::build("refresh_token", "")
         .path("/")
         .http_only(true)
+        .same_site(cookie::SameSite::Strict)
+        .secure(true)
         .max_age(time::Duration::seconds(0))
         .expires(time::OffsetDateTime::UNIX_EPOCH)
         .finish();
@@ -110,6 +127,8 @@ pub async fn refresh(
     let refresh_cookie = Cookie::build("refresh_token", refresh_token)
         .path("/")
         .http_only(true)
+        .same_site(cookie::SameSite::Strict)
+        .secure(true)
         .max_age(time::Duration::seconds(ENV.refresh_token_expiration as i64))
         .finish();
     Ok(success::Success::ok(Some(response))
@@ -124,4 +143,28 @@ pub async fn search_users(
 ) -> Result<success::Success<Vec<model::UserResponse>>, error::Error> {
     let users = user_service.search_users(&query.q, query.limit.unwrap_or(10)).await?;
     Ok(success::Success::ok(Some(users)).message("Users found successfully"))
+}
+
+/// Batch query presence status cho nhiều users
+///
+/// POST /users/presence
+/// Body: { "user_ids": ["uuid1", "uuid2", ...] }
+///
+/// Response: [{ "user_id": "...", "is_online": true, "last_seen": null }, ...]
+#[post("/presence")]
+pub async fn get_presence(
+    presence_service: web::Data<PresenceService>,
+    body: web::Json<model::PresenceQuery>,
+) -> Result<success::Success<Vec<PresenceInfo>>, error::Error> {
+    if body.user_ids.is_empty() {
+        return Ok(success::Success::ok(Some(vec![])));
+    }
+
+    // Giới hạn số lượng users per request để tránh abuse
+    if body.user_ids.len() > 200 {
+        return Err(error::Error::bad_request("Maximum 200 user IDs per request"));
+    }
+
+    let presences = presence_service.get_online_status_batch(&body.user_ids).await?;
+    Ok(success::Success::ok(Some(presences)))
 }

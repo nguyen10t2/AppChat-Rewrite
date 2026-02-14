@@ -10,5 +10,6 @@
 pub mod events;
 pub mod handler;
 pub mod message;
+pub mod presence;
 pub mod server;
 pub mod session;
